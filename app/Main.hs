@@ -1,6 +1,6 @@
 module Main where
 
-import GameGeometry
+import Geometry.Geometry
 
 main :: IO ()
 main = return ()

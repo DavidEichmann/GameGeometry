@@ -1,4 +1,4 @@
-name:                GameGeometry
+name:                game-geometry
 version:             0.1.0.0
 synopsis:            Initial project template from stack
 description:         Please see README.md
@@ -17,7 +17,7 @@ library
   hs-source-dirs:      src
   exposed-modules:
 
-                      GameGeometry
+                      Geometry.Geometry
 
 
   build-depends:       base >= 4.7 && < 5
@@ -31,7 +31,7 @@ executable GameGeometry-exe
   main-is:             Main.hs
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
-                     , GameGeometry
+                     , game-geometry
   default-language:    Haskell2010
 
 test-suite GameGeometry-test
@@ -39,7 +39,7 @@ test-suite GameGeometry-test
   hs-source-dirs:      test
   main-is:             Spec.hs
   build-depends:       base
-                     , GameGeometry
+                     , game-geometry
                      , tasty
                      , tasty-hunit
                      , tasty-quickcheck

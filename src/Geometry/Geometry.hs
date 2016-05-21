@@ -1,12 +1,10 @@
 {-# LANGUAGE ScopedTypeVariables, DeriveGeneric, DeriveAnyClass #-}
 
-module GameGeometry ( 
+module Geometry.Geometry ( 
 
           Line (..)
         , Ray  (..)
         , Seg  (..)
-        , Pos
-        , Vec
 
         , crossZ
 
@@ -22,20 +20,20 @@ module GameGeometry (
         , SegIntersect (..)
         , segIntersection
 
+        , SegRayIntersect (..)
+        , segRayIntersection
+
+
+
     ) where
 
 import Data.List
 import Linear
+import Types
 
 import Test.QuickCheck
 import Control.DeepSeq
 import GHC.Generics (Generic)
-
-type Pos = V2
-type Vec = V2
-
-type PointF = V2 Float
-type PointR = V2 Rational
 
 data Line p = Line  (Pos p) (Vec p) deriving (Show, Read, Generic, NFData)
 data Ray  p = Ray   (Pos p) (Vec p) deriving (Show, Read, Generic, NFData)
@@ -105,6 +103,12 @@ data SegIntersect p
     = SSeg (Seg p)
     | SPoint (Pos p)
     | SNothing
+    deriving (Show, Read, Eq, Generic, NFData)
+
+data SegRayIntersect p
+    = SRSeg (Seg p)
+    | SRPoint (Pos p)
+    | SRNothing
     deriving (Show, Read, Eq, Generic, NFData)
 
 crossZ :: Num a => V2 a -> V2 a -> a
@@ -193,6 +197,36 @@ segIntersection segA@(Seg a1 a2) segB@(Seg b1 b2) =
         a12 = a2 - a1
         b12 = b2 - b1
 
+segRayIntersection :: (Num a, Fractional a, Ord a, Eq a)
+                   => Seg a
+                   -> Ray a
+                   -> SegRayIntersect a
+segRayIntersection seg (Ray rayP rayD) =
+    case lineSegIntersection (Line rayP rayD) seg of
+        LSSeg (Seg a b) ->
+            if (a - rayP) `dot` rayD < 0
+            then
+                if (b - rayP) `dot` rayD < 0
+                then SRNothing
+                else
+                    if rayP == b
+                    then SRPoint b
+                    else SRSeg (Seg rayP b)
+            else
+                if (b - rayP) `dot` rayD < 0
+                then
+                    if rayP == a
+                    then SRPoint a
+                    else SRSeg (Seg rayP a)
+                else SRSeg seg
+
+        LSPoint p ->
+            if (p - rayP) `dot` rayD < 0
+            then SRNothing
+            else SRPoint p
+
+        LSNothing -> SRNothing
+
 
 -- -- Some Geometry
 -- data AABB = AABB Pos a Pos a
@@ -248,5 +282,6 @@ segIntersection segA@(Seg a1 a2) segB@(Seg b1 b2) =
 -- clipConcavePolygonPath clipPolygon path = foldl (\p (a, ab) -> clipLinePath a ab p) path clipLines
 --     where
 --         clipLines = map (\(a, b) -> (a, (b - a))) $ zip clipPolygon (tail $ cycle clipPolygon)
+
 
 
