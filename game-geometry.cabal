@@ -17,7 +17,8 @@ library
   hs-source-dirs:      src
   exposed-modules:
 
-                       Geometry.Geometry
+                       GameGeometry
+                     , Geometry.Geometry
                      , Geometry.RayTrace
                      , Types
 
