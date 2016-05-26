@@ -3,6 +3,7 @@
 import Data.List
 
 import Geometry.Geometry
+import Geometry.RayTrace
 import Linear
 
 import Test.Tasty
@@ -119,6 +120,25 @@ testsHUnit = testGroup "Unit Tests" [
                     (Ray  (r2 0 (-1)) (r2 1   1))
                         @?= SRPoint (r2 1 0)
         ]
+
+        , testGroup "Ray Casting" [
+            
+            testCase "Many Segments 01" $
+                let
+                    ray = Ray (r2 1 1) (r2 2 1)
+                    hitsAndSegsByDist = 
+                        [(r2 1 1, Seg (r2 2 0) (r2 0 2))
+                        ,(r2 3 2, Seg (r2 3 2) (r2 4 2))
+                        ,(r2 5 3, Seg (r2 5 0) (r2 5 7))
+                        ,(r2 7 4, Seg (r2 9 5) (r2 7 4))]   -- segment on line
+                    misses = 
+                        [Seg (r2 1 0) (r2 0 0.9)
+                        ,Seg (r2 4 2) (r2 5 2)
+                        ,Seg (r2 5 4) (r2 5 7)
+                        ,Seg (r2 5 2) (r2 5 0)
+                        ,Seg (r2 (-1) 0) (r2 (-3) (-1))]
+                in rayTrace (misses ++ (reverse $ map snd hitsAndSegsByDist)) ray @?= hitsAndSegsByDist
+        ]
     ]
 
 testsQuickCheck :: TestTree
@@ -176,6 +196,7 @@ testsQuickCheck = testGroup "Property Tests" [
         ]
 
         , testGroup "Seg Ray Intersect" [
+
               testProperty "Reverse Ray" $
                 (\(seg :: Seg TestType) ray@(Ray p d) -> case segRayIntersection seg ray of
                     SRPoint p' ->
@@ -187,6 +208,37 @@ testsQuickCheck = testGroup "Property Tests" [
                 (\(p :: V2 TestType) d ->
                     let seg = Seg (p + d) (p + 2 *^ d)
                     in segRayIntersection seg (Ray p d) == SRSeg seg)
+        ]
+
+        , testGroup "Point Seg Intersect" [
+
+              testProperty "On First Seg Point" $
+                (\(a :: V2 TestType) b ->
+                    let seg = Seg a b
+                    in pointSegIntersection a seg == Just a)
+
+            , testProperty "On Second Seg Point" $
+                (\(a :: V2 TestType) b ->
+                    let seg = Seg a b
+                    in pointSegIntersection b seg == Just b)
+
+            , testProperty "On Midpoint Seg Point" $
+                (\(a :: V2 TestType) b ->
+                    let
+                        seg = Seg a b
+                        p = (a + b) ^/ 2
+                    in pointSegIntersection p seg == Just p)
+
+            , testProperty "Degenerate Seg" $
+                (\(a :: V2 TestType) ->
+                    let seg = Seg a a
+                    in pointSegIntersection a seg == Just a)
+
+            , testProperty "Off Edge" $
+                (\(a :: V2 TestType) b offsetVector ->
+                    -- ensure the offsetVector is not along the segment or at least is far enough to escape the segment.
+                    offsetVector `crossZ` (a-b) > 0 || (quadrance offsetVector > quadrance (1-b)) ==>
+                    pointSegIntersection (a + offsetVector) (Seg a b) == Nothing)
         ]
     ]
 

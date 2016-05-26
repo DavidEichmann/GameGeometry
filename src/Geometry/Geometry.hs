@@ -6,8 +6,6 @@ module Geometry.Geometry (
         , Ray  (..)
         , Seg  (..)
 
-        , crossZ
-
         , LineIntersect (..)
         , lineIntersection
 
@@ -23,7 +21,7 @@ module Geometry.Geometry (
         , SegRayIntersect (..)
         , segRayIntersection
 
-
+        , pointSegIntersection
 
     ) where
 
@@ -50,12 +48,6 @@ instance (Fractional p, Ord p, Eq p) => Eq (Ray p) where
 instance Eq p => Eq (Seg p) where
     (Seg a1 a2) == (Seg b1 b2) = (a1 == b1 && a2 == b2) || (a1 == b2 && a2 == b1)
 
-instance Arbitrary p => Arbitrary (V2 p) where
-    arbitrary = do
-        x <- arbitrary
-        y <- arbitrary
-        return (V2 x y)
-
 instance Arbitrary p => Arbitrary (Line p) where
     arbitrary = do
         p <- arbitrary
@@ -73,6 +65,9 @@ instance Arbitrary p => Arbitrary (Seg p) where
         p1 <- arbitrary
         p2 <- arbitrary
         return (Seg p1 p2)
+
+instance Arbitrary p => Arbitrary (V2 p) where
+    arbitrary = V2 <$> arbitrary <*> arbitrary
 
 
 data LineIntersectT p
@@ -110,10 +105,6 @@ data SegRayIntersect p
     | SRPoint (Pos p)
     | SRNothing
     deriving (Show, Read, Eq, Generic, NFData)
-
-crossZ :: Num a => V2 a -> V2 a -> a
-crossZ (V2 x1 y1) (V2 x2 y2) = (x1 * y2) - (y1 * x2)
-
 
 lineIntersectionT   :: (Fractional a, Eq a)
                     => Line a           -- ^ First line
@@ -226,6 +217,23 @@ segRayIntersection seg (Ray rayP rayD) =
             else SRPoint p
 
         LSNothing -> SRNothing
+
+pointSegIntersection :: (Eq p, Ord p, Num p) => Pos p -> Seg p -> Maybe (Pos p)
+pointSegIntersection p (Seg a b)
+    | p == a ||
+      p == b ||
+      (pa `crossZ` pb == 0 && pa `dot` pb < 0)
+                = Just p
+    | otherwise = Nothing
+    where
+        pa = a - p
+        pb = b - p
+
+
+
+
+
+
 
 
 -- -- Some Geometry
