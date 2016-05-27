@@ -2,9 +2,10 @@
 
 module Geometry.Geometry (
         
-          Line (..)
-        , Ray  (..)
-        , Seg  (..)
+          Line    (..)
+        , Ray     (..)
+        , Seg     (..)
+        , Polygon (..)
 
         , LineIntersect (..)
         , lineIntersection
