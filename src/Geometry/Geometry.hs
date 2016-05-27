@@ -50,14 +50,8 @@ instance Eq p => Eq (Seg p) where
     (Seg a1 a2) == (Seg b1 b2) = (a1 == b1 && a2 == b2) || (a1 == b2 && a2 == b1)
 
 instance Eq p => Eq (Polygon p) where
-    (Polygon [])       == (Polygon []) = True
-    (Polygon xs@(x:_)) == (Polygon ys) = or . map check . elemIndices x $ ys
-        where
-            -- Given an offset at which x appears in ys
-            -- checks if the list starting from there is the same or the reverse
-            check :: Int -> Bool
-            check i =  (xs == rotate i ys)
-                    || (xs == reverse (rotate (i+1) ys))
+    -- Polygons are equal when the list of points or rotated or even reversed
+    (Polygon a) == (Polygon b) = elem a $ rotations b ++ (rotations . reverse) b
 
 
 instance Arbitrary p => Arbitrary (V2 p) where
@@ -186,7 +180,7 @@ segIntersection :: forall a. (Num a, Fractional a, Ord a, Eq a)
                 -> SegIntersect a
 segIntersection segA@(Seg a1 a2) segB@(Seg b1 b2) =
     case lineIntersectionT (Line a1 a12) (Line b1 b12) of
-        LTLine         -> if areIntersecting
+        LTLine        -> if areIntersecting
                             then if p1 == p2
                                 then SPoint p1
                                 else SSeg (Seg p1 p2)
@@ -200,7 +194,7 @@ segIntersection segA@(Seg a1 a2) segB@(Seg b1 b2) =
         LTPoint aT bT -> if 0 <= aT && aT <= 1 && 0 <= bT && bT <= 1
                             then SPoint (a1 + (a12 ^* aT))
                             else SNothing
-        LTNothing      -> SNothing
+        LTNothing     -> SNothing
     where
         a12 = a2 - a1
         b12 = b2 - b1
