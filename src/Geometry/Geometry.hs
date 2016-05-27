@@ -1,8 +1,9 @@
-{-# LANGUAGE DeriveAnyClass      #-}
-{-# LANGUAGE DeriveGeneric       #-}
-{-# LANGUAGE FlexibleInstances   #-}
-{-# LANGUAGE PatternSynonyms     #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PatternSynonyms       #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 
 module Geometry.Geometry (
 
@@ -46,6 +47,10 @@ module Geometry.Geometry (
         , pointLineIntersectionT
 
         , pointInside
+
+        , HasSeg (..)
+        , Lineable (..)
+
     ) where
 
 import           Data.List
@@ -137,6 +142,24 @@ instance (Eq p, Arbitrary p) => Arbitrary (Polygon p) where
         l  <- arbitrary
         ps <- vector l
         return (polygon ps)
+
+class HasSeg a c where
+    getSeg :: a -> Seg c
+    setSeg :: Seg c -> a -> a
+
+instance HasSeg (Seg a) a where
+    getSeg = id
+    setSeg = const
+
+instance HasSeg (l, Seg a) a where
+    getSeg = snd
+    setSeg newSeg (label, _) = (label, newSeg)
+
+class Lineable a c where
+    toLine :: a -> Line c
+
+instance (Eq c, Num c) =>  Lineable (Seg c) c where
+    toLine (Seg a b) = line' a (b - a)
 
 data LineIntersectT p
     = LTLine

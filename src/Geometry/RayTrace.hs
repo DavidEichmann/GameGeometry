@@ -1,4 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Geometry.RayTrace (
 
@@ -13,10 +15,10 @@ import Geometry.Geometry
 import Utils
 import Linear
 
-rayTrace :: forall p. (Fractional p, Ord p)
-    => [Seg p]
+rayTrace :: forall p hasSeg. (Fractional p, Ord p, HasSeg hasSeg p)
+    => [hasSeg]
     -> Ray p
-    -> [(Pos p, Seg p)]
+    -> [(Pos p, hasSeg)]
 rayTrace edges ray@(Ray rayStart _)
     -- Sort by distance to ray start
     = sortOn (qd rayStart . fst)
@@ -24,9 +26,9 @@ rayTrace edges ray@(Ray rayStart _)
     . mapMaybe rayTraceSeg
     $ edges
     where
-        rayTraceSeg :: Seg p -> Maybe (Pos p, Seg p)
+        rayTraceSeg :: hasSeg -> Maybe (Pos p, hasSeg)
         rayTraceSeg seg = do
-            intersectPoint <- toClosestPoint rayStart $ segRayIntersection seg ray
+            intersectPoint <- toClosestPoint rayStart $ segRayIntersection (getSeg seg) ray
             return (intersectPoint, seg)
 
 -- | Convert a segemnt-ray intersection to the colsest point if one exists.

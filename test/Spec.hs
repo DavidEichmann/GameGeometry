@@ -1,9 +1,13 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 import           Data.List
+import           Data.Fixed (mod')
 
+import qualified Utils as Utils
+import           Geometry.Angles
 import           Geometry.Geometry
 import           Geometry.RayTrace
+import           Geometry.Shadows
 import           Linear                hiding (rotate)
 
 import           Test.Tasty
@@ -162,14 +166,113 @@ testsHUnit = testGroup "Unit Tests" [
 
             , testCase "Vertex on the right (special case)" $
                 pointInside (r2 1 1) (polygon [r2 1 0, r2 2 1, r2 1 2, r2 0 1]) @?= True
+        ]
 
+        , testGroup "Shadow fronts" [
+
+              testCase "Single Seg" $
+                let
+                    focalPoint = r2 1 1
+                    a = seg' (r2  2 1) (r2  1 2)
+                    segs = [a]
+                    expected = [[a]]
+                in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
+
+            , testCase "2 Segs" $
+                let
+                    focalPoint = r2 1 1
+                    segs@[a,b] = 
+                        [ seg' (r2   2  1) (r2   1    2)
+                        , seg' (r2 (-2) 0) (r2 (-2) (-2))
+                        ]
+                    expected = [[a],[b]]
+                in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
+
+            , testCase "Overlapping Segs" $
+                let
+                    focalPoint = r2 1 1
+                    segs@[a,b,c] =
+                        [ seg' (r2   2     1) (r2   1      2)
+                        , seg' (r2   1.5   1) (r2   1.5    2)
+                        , seg' (r2 (-2  )  0) (r2 (-2  ) (-2))
+                        ]
+                    
+                    expected = [
+                            [seg' (r2 1.5 1) (r2 1.5 1.5), seg' (r2 1.5 1.5) (r2 1 2)],
+                            [c]
+                        ]
+                in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
+
+            , testCase "Doc example origin" $
+                let
+                    focalPoint = r2 0 0
+                    segs@[a,b,c,d,e,f] =
+                        [ seg' (r2  (-5)  10) (r2 (-10) 10)
+                        , seg' (r2 (-10)  10) (r2 (-10)  5)
+                        , seg' (r2 (-10)   5) (r2  (-5)  5)
+                        , seg' (r2  (-5)   5) (r2  (-5) 10)
+                        , seg' (r2   10  (-1)) (r2   10  1)
+                        , seg' (r2   20 (-10)) (r2   20 10)
+                        ]
+                    expected = [
+                            [d,c],
+                            [seg' (r2 20 (-10)) (r2 20 (-2)), e, seg' (r2 20 2) (r2 20 10)]
+                        ]
+                in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
+
+            , testCase "Doc example" $
+                let
+                    focalPoint = r2 10 10
+                    segs@[a,b,c,d,e,f] =
+                        [ seg' (r2  5 20) (r2  0 20)
+                        , seg' (r2  0 20) (r2  0 15)
+                        , seg' (r2  0 15) (r2  5 15)
+                        , seg' (r2  5 15) (r2  5 20)
+                        , seg' (r2 20  9) (r2 20 11)
+                        , seg' (r2 30  0) (r2 30 20)
+                        ]
+                    expected = [
+                            [d,c],
+                            [seg' (r2 30 0) (r2 30 8), e, seg' (r2 30 12) (r2 30 20)]
+                        ]
+                in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
+
+
+            , testCase "Doc example with labels" $
+                let
+                    focalPoint = r2 10 10
+                    segs@[a,b,c,d,e,f] =
+                        [ ("a", seg' (r2  5 20) (r2  0 20))
+                        , ("b", seg' (r2  0 20) (r2  0 15))
+                        , ("c", seg' (r2  0 15) (r2  5 15))
+                        , ("d", seg' (r2  5 15) (r2  5 20))
+                        , ("e", seg' (r2 20  9) (r2 20 11))
+                        , ("f", seg' (r2 30  0) (r2 30 20))
+                        ]
+                    expected = [
+                            [d,c],
+                            [("f", seg' (r2 30 0) (r2 30 8)), e, ("f", seg' (r2 30 12) (r2 30 20))]
+                        ]
+                in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
         ]
     ]
 
+atan2Positive y x = ((atan2 y x) + (2*pi)) `mod'` (2*pi)
+
 testsQuickCheck :: TestTree
 testsQuickCheck = testGroup "Property Tests" [
+    
 
-        testGroup "Primitives" [
+        testGroup "Angles" [
+
+            testProperty "spreadX2 Ordering the same as atan2" $
+                (\(NonZero a@(V2 ax ay)) (NonZero b@(V2 bx (by :: Double)))
+                    -> ((atan2Positive ay ax) `compare` (atan2Positive by bx)) === 
+                        (unSpr (spreadX2 a) `compare` unSpr (spreadX2 b)))
+
+        ]
+
+        , testGroup "Primitives" [
 
             testGroup "Line" [
 
