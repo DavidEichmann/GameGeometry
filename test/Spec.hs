@@ -4,7 +4,7 @@ import Data.List
 
 import Geometry.Geometry
 import Geometry.RayTrace
-import Linear
+import Linear hiding (rotate)
 
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -43,6 +43,12 @@ testsHUnit = testGroup "Unit Tests" [
 
             , testCase "Seg /=" $
                 (Seg (r2 100 200) (r2 1 2)) /= (Seg (r2 100 200) (r2 (-1) (-2))) @?= True
+
+            , testCase "Polygon ==" $
+                (Polygon [r2 1 1, r2 2 2, r2 (-5) (-4)] @?= Polygon [r2 1 1, r2 (-5) (-4), r2 2 2])
+
+            , testCase "Polygon /=" $
+                (Polygon [r2 1 1, r2 2 2, r2 (-5) (-4)] /= Polygon [r2 1 1, r2 (-5) (-4), r2 3 2]) @?= True
 
         ]
 
@@ -164,6 +170,15 @@ testsQuickCheck = testGroup "Property Tests" [
                     (\p d (NonZero (dd :: V2 TestType)) -> d `crossZ` dd == 0 || Line p d /= Line p (d + dd))
             ]
 
+            , testGroup "Polygon" [
+
+                  testProperty "a == a" $
+                    (\(a :: Polygon TestType) -> a == a)
+
+                , testProperty "a == a' where a' could be reversed and rotated a" $
+                    (\(a@(Polygon xs) :: Polygon TestType) b c -> a == Polygon ((if c then reverse else id) . rotate b $ xs))
+            ]
+
         ]
 
         , testGroup "Line Line Intersect" [
@@ -242,3 +257,5 @@ testsQuickCheck = testGroup "Property Tests" [
         ]
     ]
 
+rotate :: Int -> [a] -> [a]
+rotate i xs = let l = length xs in take l . drop (mod i l) . cycle $ xs
