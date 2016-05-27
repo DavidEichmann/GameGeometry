@@ -10,7 +10,7 @@ import Data.Function (on)
 import Data.Maybe (mapMaybe)
 import Data.List (minimumBy, sortOn)
 import Geometry.Geometry
-import Types
+import Utils
 import Linear
 
 rayTrace :: forall p. (Fractional p, Ord p)

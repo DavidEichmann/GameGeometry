@@ -16,13 +16,12 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:
-
                        GameGeometry
                      , Geometry.Geometry
+                     , Geometry.BoundedGeometry
                      , Geometry.RayTrace
-                     , Types
-
-
+  other-modules:
+                       Utils
   build-depends:       base >= 4.7 && < 5
                      , linear
                      , QuickCheck

@@ -1,7 +1,10 @@
 module GameGeometry (
-		module ToExport
-	) where
+          Pos
+        , Vec
+        , module ToExport
+    ) where
 
-import Geometry.Geometry as ToExport
-import Geometry.RayTrace as ToExport
-import Types as ToExport
+import Geometry.Geometry        as ToExport
+import Geometry.BoundedGeometry as ToExport
+import Geometry.RayTrace        as ToExport
+import Utils

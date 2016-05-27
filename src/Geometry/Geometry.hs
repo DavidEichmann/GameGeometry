@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables, DeriveGeneric, DeriveAnyClass #-}
 
-module Geometry.Geometry ( 
-
+module Geometry.Geometry (
+        
           Line (..)
         , Ray  (..)
         , Seg  (..)
@@ -22,20 +22,20 @@ module Geometry.Geometry (
         , segRayIntersection
 
         , pointSegIntersection
-
     ) where
 
 import Data.List
-import Linear
-import Types
+import Linear hiding (rotate, vector)
+import Utils
 
 import Test.QuickCheck
 import Control.DeepSeq
 import GHC.Generics (Generic)
 
-data Line p = Line  (Pos p) (Vec p) deriving (Show, Read, Generic, NFData)
-data Ray  p = Ray   (Pos p) (Vec p) deriving (Show, Read, Generic, NFData)
-data Seg  p = Seg   (Pos p) (Pos p) deriving (Show, Read, Generic, NFData)
+data Line    p = Line    (Pos p) (Vec p) deriving (Show, Read, Generic, NFData)
+data Ray     p = Ray     (Pos p) (Vec p) deriving (Show, Read, Generic, NFData)
+data Seg     p = Seg     (Pos p) (Pos p) deriving (Show, Read, Generic, NFData)
+data Polygon p = Polygon [Pos p]         deriving (Show, Read, Generic, NFData)
 
 instance (Fractional p, Eq p) => Eq (Line p) where
     l1 == l2 = case lineIntersectionT l1 l2 of
@@ -47,6 +47,20 @@ instance (Fractional p, Ord p, Eq p) => Eq (Ray p) where
 
 instance Eq p => Eq (Seg p) where
     (Seg a1 a2) == (Seg b1 b2) = (a1 == b1 && a2 == b2) || (a1 == b2 && a2 == b1)
+
+instance Eq p => Eq (Polygon p) where
+    (Polygon [])       == (Polygon []) = True
+    (Polygon xs@(x:_)) == (Polygon ys) = or . map check . elemIndices x $ ys
+        where
+            -- Given an offset at which x appears in ys
+            -- checks if the list starting from there is the same or the reverse
+            check :: Int -> Bool
+            check i =  (xs == rotate i ys)
+                    || (xs == reverse (rotate (i+1) ys))
+
+
+instance Arbitrary p => Arbitrary (V2 p) where
+    arbitrary = V2 <$> arbitrary <*> arbitrary
 
 instance Arbitrary p => Arbitrary (Line p) where
     arbitrary = do
@@ -66,9 +80,11 @@ instance Arbitrary p => Arbitrary (Seg p) where
         p2 <- arbitrary
         return (Seg p1 p2)
 
-instance Arbitrary p => Arbitrary (V2 p) where
-    arbitrary = V2 <$> arbitrary <*> arbitrary
-
+instance Arbitrary p => Arbitrary (Polygon p) where
+    arbitrary = do
+        l  <- arbitrary
+        ps <- vector l
+        return (Polygon ps)
 
 data LineIntersectT p
     = LTLine
@@ -109,7 +125,7 @@ data SegRayIntersect p
 lineIntersectionT   :: (Fractional a, Eq a)
                     => Line a           -- ^ First line
                     -> Line a           -- ^ Second line
-                    -> LineIntersectT a     -- ^ Line intersection stuff
+                    -> LineIntersectT a -- ^ Line intersection stuff
 lineIntersectionT (Line p1 d1) (Line p2 d2)
     = if d2Xd1 == 0
         then if p21Xd2 == 0
