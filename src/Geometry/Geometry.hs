@@ -1,11 +1,31 @@
-{-# LANGUAGE ScopedTypeVariables, DeriveGeneric, DeriveAnyClass #-}
+{-# LANGUAGE DeriveAnyClass      #-}
+{-# LANGUAGE DeriveGeneric       #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE PatternSynonyms     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Geometry.Geometry (
-        
-          Line    (..)
-        , Ray     (..)
-        , Seg     (..)
-        , Polygon (..)
+
+          Line
+        , Ray
+        , Seg
+        , Polygon
+
+        , pattern Line
+        , pattern Ray
+        , pattern Seg
+        , pattern Polygon
+
+        , line
+        , line'
+
+        , ray
+        , ray'
+
+        , seg
+        , seg'
+
+        , polygon
 
         , LineIntersect (..)
         , lineIntersection
@@ -15,7 +35,7 @@ module Geometry.Geometry (
 
         , LineSegIntersect (..)
         , lineSegIntersection
-        
+
         , SegIntersect (..)
         , segIntersection
 
@@ -23,20 +43,55 @@ module Geometry.Geometry (
         , segRayIntersection
 
         , pointSegIntersection
+        , pointLineIntersectionT
     ) where
 
-import Data.List
-import Linear hiding (rotate, vector)
-import Utils
+import           Data.List
+import           Data.Maybe      (fromMaybe)
+import           Linear          hiding (rotate, vector)
+import           Utils
 
-import Test.QuickCheck
-import Control.DeepSeq
-import GHC.Generics (Generic)
+import           Control.DeepSeq
+import           GHC.Generics    (Generic)
+import           Test.QuickCheck
 
-data Line    p = Line    (Pos p) (Vec p) deriving (Show, Read, Generic, NFData)
-data Ray     p = Ray     (Pos p) (Vec p) deriving (Show, Read, Generic, NFData)
-data Seg     p = Seg     (Pos p) (Pos p) deriving (Show, Read, Generic, NFData)
-data Polygon p = Polygon [Pos p]         deriving (Show, Read, Generic, NFData)
+data Line    p = Line'    (Pos p) (Vec p) deriving (Show, Read, Generic, NFData)
+data Ray     p = Ray'     (Pos p) (Vec p) deriving (Show, Read, Generic, NFData)
+data Seg     p = Seg'     (Pos p) (Pos p) deriving (Show, Read, Generic, NFData)
+data Polygon p = Polygon' [Pos p]         deriving (Show, Read, Generic, NFData)
+-- data Path p
+
+pattern Line    p d <- Line'    p d
+pattern Ray     p d <- Ray'     p d
+pattern Seg     p d <- Seg'     p d
+pattern Polygon ps  <- Polygon' ps
+
+line :: (Eq p, Num p) => Pos p -> Vec p -> Maybe (Line p)
+line p d
+    | d == zero = Nothing
+    | otherwise = Just $ Line' p d
+
+line' :: (Eq p, Num p) => Pos p -> Vec p -> Line p
+line' p = fromMaybe (error "Cannot instantiate Line with a direction vector of zero.") . line p
+
+ray :: (Eq p, Num p) => Pos p -> Vec p -> Maybe (Ray p)
+ray p d
+    | d == zero = Nothing
+    | otherwise = Just $ Ray' p d
+
+ray' :: (Eq p, Num p) => Pos p -> Vec p -> Ray p
+ray' p = fromMaybe (error "Cannot instantiate Ray with a direction vector of zero.") . ray p
+
+seg :: (Eq p, Num p) => Pos p -> Pos p -> Maybe (Seg p)
+seg a b
+    | a == b    = Nothing
+    | otherwise = Just $ Seg' a b
+
+seg' :: (Eq p, Num p) => Pos p -> Pos p -> Seg p
+seg' p = fromMaybe (error "Cannot instantiate Seg with two equal points.") . seg p
+
+polygon :: Eq p => [Pos p] -> Polygon p
+polygon = Polygon' . map head . group
 
 instance (Fractional p, Eq p) => Eq (Line p) where
     l1 == l2 = case lineIntersectionT l1 l2 of
@@ -57,29 +112,29 @@ instance Eq p => Eq (Polygon p) where
 instance Arbitrary p => Arbitrary (V2 p) where
     arbitrary = V2 <$> arbitrary <*> arbitrary
 
-instance Arbitrary p => Arbitrary (Line p) where
+instance (Ord p, Num p, Arbitrary p) => Arbitrary (Line p) where
     arbitrary = do
         p <- arbitrary
-        d <- arbitrary
-        return (Line p d)
+        NonZero d <- arbitrary
+        return (Line' p d)
 
-instance Arbitrary p => Arbitrary (Ray p) where
+instance (Ord p, Num p, Arbitrary p) => Arbitrary (Ray p) where
     arbitrary = do
         p <- arbitrary
-        d <- arbitrary
-        return (Ray p d)
+        NonZero d <- arbitrary
+        return (Ray' p d)
 
-instance Arbitrary p => Arbitrary (Seg p) where
+instance (Ord p, Num p, Arbitrary p) => Arbitrary (Seg p) where
     arbitrary = do
         p1 <- arbitrary
-        p2 <- arbitrary
-        return (Seg p1 p2)
+        p2 <- arbitrary `suchThat` (/= p1)
+        return (Seg' p1 p2)
 
-instance Arbitrary p => Arbitrary (Polygon p) where
+instance (Eq p, Arbitrary p) => Arbitrary (Polygon p) where
     arbitrary = do
         l  <- arbitrary
         ps <- vector l
-        return (Polygon ps)
+        return (polygon ps)
 
 data LineIntersectT p
     = LTLine
@@ -121,9 +176,10 @@ lineIntersectionT   :: (Fractional a, Eq a)
                     => Line a           -- ^ First line
                     -> Line a           -- ^ Second line
                     -> LineIntersectT a -- ^ Line intersection stuff
-lineIntersectionT (Line p1 d1) (Line p2 d2)
+lineIntersectionT l1@(Line p1 d1) l2@(Line p2 d2)
     = if d2Xd1 == 0
-        then if p21Xd2 == 0
+        then
+            if p21Xd2 == 0
             then LTLine
             else LTNothing
         else LTPoint t1 t2
@@ -134,7 +190,7 @@ lineIntersectionT (Line p1 d1) (Line p2 d2)
         p21Xd2 = p21 `crossZ` d2
 
         t1 = p21Xd2 / d2Xd1
-        t2 = (p21 `crossZ` d1)  / d2Xd1
+        t2 = (p21 `crossZ` d1) / d2Xd1
 
 lineIntersection    :: (Num a, Fractional a, Eq a)
                     => Line a
@@ -151,7 +207,7 @@ lineRayIntersection :: (Num a, Fractional a, Ord a, Eq a)
                     -> Ray a
                     -> LineRayIntersect a
 lineRayIntersection line ray@(Ray rayP rayD) =
-    case lineIntersectionT line (Line rayP rayD) of
+    case lineIntersectionT line (Line' rayP rayD) of
         LTLine         -> LRRay ray
         LTPoint _ rayT -> if 0 <= rayT
                             then LRPoint (rayP + (rayD ^* rayT))
@@ -162,8 +218,8 @@ lineSegIntersection :: (Num a, Fractional a, Ord a, Eq a)
                     => Line a
                     -> Seg a
                     -> LineSegIntersect a
-lineSegIntersection line seg@(Seg p1 p2) = 
-    case lineIntersectionT line (Line p1 p12) of
+lineSegIntersection line seg@(Seg p1 p2) =
+    case lineIntersectionT line (Line' p1 p12) of
         LTLine         -> LSSeg seg
         LTPoint _ segT -> if 0 <= segT && segT <= 1
                             then LSPoint (p1 + (p12 ^* segT))
@@ -178,12 +234,14 @@ segIntersection :: forall a. (Num a, Fractional a, Ord a, Eq a)
                 => Seg a
                 -> Seg a
                 -> SegIntersect a
-segIntersection segA@(Seg a1 a2) segB@(Seg b1 b2) =
-    case lineIntersectionT (Line a1 a12) (Line b1 b12) of
+segIntersection segA@(Seg a1 a2) segB@(Seg b1 b2)
+    | a1 == a2  = maybe SNothing SPoint $ pointSegIntersection a1 segB
+    | b1 == b2  = maybe SNothing SPoint $ pointSegIntersection b1 segA
+    | otherwise = case lineIntersectionT (Line' a1 a12) (Line' b1 b12) of
         LTLine        -> if areIntersecting
                             then if p1 == p2
                                 then SPoint p1
-                                else SSeg (Seg p1 p2)
+                                else SSeg (Seg' p1 p2)
                             else SNothing
                         where
                             -- order points along the line
@@ -204,7 +262,7 @@ segRayIntersection :: (Num a, Fractional a, Ord a, Eq a)
                    -> Ray a
                    -> SegRayIntersect a
 segRayIntersection seg (Ray rayP rayD) =
-    case lineSegIntersection (Line rayP rayD) seg of
+    case lineSegIntersection (Line' rayP rayD) seg of
         LSSeg (Seg a b) ->
             if (a - rayP) `dot` rayD < 0
             then
@@ -213,13 +271,13 @@ segRayIntersection seg (Ray rayP rayD) =
                 else
                     if rayP == b
                     then SRPoint b
-                    else SRSeg (Seg rayP b)
+                    else SRSeg (Seg' rayP b)
             else
                 if (b - rayP) `dot` rayD < 0
                 then
                     if rayP == a
                     then SRPoint a
-                    else SRSeg (Seg rayP a)
+                    else SRSeg (Seg' rayP a)
                 else SRSeg seg
 
         LSPoint p ->
@@ -240,11 +298,14 @@ pointSegIntersection p (Seg a b)
         pa = a - p
         pb = b - p
 
-
-
-
-
-
+pointLineIntersectionT :: (Eq p, Fractional p) => Pos p -> Line p -> Maybe p
+pointLineIntersectionT p (Line x d)
+    | p == x ||
+      xp `crossZ` d == 0
+                = Just $ xp `dot` d / quadrance d
+    | otherwise = Nothing
+    where
+        xp = p - x
 
 
 -- -- Some Geometry
