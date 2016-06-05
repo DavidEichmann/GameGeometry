@@ -44,6 +44,8 @@ module Geometry.Geometry (
 
         , pointSegIntersection
         , pointLineIntersectionT
+
+        , pointInside
     ) where
 
 import           Data.List
@@ -307,6 +309,13 @@ pointLineIntersectionT p (Line x d)
     where
         xp = p - x
 
+pointInside :: forall p. (Fractional p, Ord p) => Pos p -> Polygon p -> Bool
+pointInside (V2 x y) (Polygon' shape) = foldl' (/=) False . map intersectsEdge . zip shape $ rotate 1 shape
+    where
+        intersectsEdge :: (Pos p, Pos p) -> Bool
+        intersectsEdge (V2 ax ay, V2 bx by)
+            = (ay > y) /= (by > y)
+            && x < (bx - ax) * (y - ay) / (by - ay) + ax
 
 -- -- Some Geometry
 -- data AABB = AABB Pos a Pos a

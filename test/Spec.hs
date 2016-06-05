@@ -145,6 +145,25 @@ testsHUnit = testGroup "Unit Tests" [
                         ,seg' (r2 (-1) 0) (r2 (-3) (-1))]
                 in rayTrace (misses ++ (reverse $ map snd hitsAndSegsByDist)) r @?= hitsAndSegsByDist
         ]
+
+        , testGroup "Point inside Polygon" [
+
+              testCase "Completely inside / outside" $
+                let p = r2 1 1
+                    a = polygon [r2 0 0, r2 2 0, r2 2 2, r2 0 2]
+                    b = polygon [r2 3 3, r2 2 3, r2 2 2, r2 3 2]
+                in pointInside p a && not (pointInside p b) @?= True
+
+            , testCase "On an edge / vertex" $
+                let p = r2 1 1
+                    a = polygon [r2 0 0, r2 1 0, r2 1 1, r2 0 1]
+                    b = polygon [r2 0 0, r2 1 0, r2 1 2, r2 0 2]
+                in pointInside p a || pointInside p b @?= False
+
+            , testCase "Vertex on the right (special case)" $
+                pointInside (r2 1 1) (polygon [r2 1 0, r2 2 1, r2 1 2, r2 0 1]) @?= True
+
+        ]
     ]
 
 testsQuickCheck :: TestTree
