@@ -6,6 +6,10 @@
 
 module Geometry.Shadows (
         shadowFronts
+
+        , ShadowFront(..)
+        , initialMergeState
+        , MergeState
     ) where
 
 import Utils
@@ -13,7 +17,7 @@ import Geometry.Geometry
 import Geometry.Angles
 import GHC.Exts
 import Safe
-import Data.Maybe (catMaybes, mapMaybe, fromJust, isJust)
+import Data.Maybe (catMaybes, mapMaybe, fromJust, isJust, fromMaybe, maybeToList)
 import Data.List (partition, zipWith3, groupBy, sortOn, find)
 import Data.List.Split
 import Data.Vector (Vector, (!))
@@ -22,6 +26,95 @@ import Linear
 import qualified Data.Set as S
 
 import Debug.Trace
+
+
+type ShadowFrontSeg label p = (label, Seg p) -- (label, spreadX2, squareDist from focal point, point)
+-- list or segments ordered by SpreadX2 and split by empty space. Ther is no "visual" overlap about the focal point
+-- elements always have atleadt 2 elements (a single segment)
+-- first element is the START of a segment after SpreadX2 == 0 (i.e. the point after )
+data ShadowFront label p = ShadowFront [ShadowFrontSeg label p]
+
+toLabeledSegs :: ShadowFront label p -> [(label, Seg p)]
+toLabeledSegs = undefined
+
+empty :: ShadowFront label p
+empty = ShadowFront []
+
+merge :: ShadowFront label p -> ShadowFront label p -> ShadowFront label p
+merge = undefined
+
+filterByFront :: ShadowFront label p -> ShadowFront label p -> ShadowFront label p
+filterByFront = undefined
+
+toShadowFront :: [(label, Seg p)] -> ShadowFront label p    -- this is O(n log(n)) by using divide and conquer (and merge)
+toShadowFront = undefined
+-- TODO: make sure to filter out colinaer segs w.r.t the focal point
+
+-- Helpers
+flipNature :: SegNature -> SegNature
+flipNature Near = Far
+flipNature Far  = Near
+data SegNature = Near | Far
+    deriving (Show)
+
+data StartSegBreak label p = StartSegBreak SegNature (ShadowFrontSeg label p)
+    deriving (Show)
+
+data MergeState label p
+    = MergeState
+        (ShadowFrontSeg label p) [ShadowFrontSeg label p]           -- ^ current near seg and future segs
+        (Maybe (ShadowFrontSeg label p)) [ShadowFrontSeg label p]   -- ^ current far seg and future segs
+    deriving (Show)
+
+initialMergeState :: forall label p. (Fractional p, Ord p)
+     => Pos p                                           -- ^ focal point
+     -> ShadowFront label p                             -- ^ first front
+     -> ShadowFront label p                             -- ^ second front
+     -> (MergeState label p, Maybe (StartSegBreak label p))       -- ^ initial merge state and possible broken segment
+-- assume that the inputs are non-empty
+initialMergeState focalPoint (ShadowFront allAs@((a@(al, Seg a1 a2)) : as)) (ShadowFront allBs@((b@(bl, Seg b1 b2)) : bs))
+    = if aSpread == bSpread
+        then (MergeState a as (Just b) bs, Nothing)         -- is this needed?
+        else if brokenFirstFrontStartsOnNonEmptySpace
+            then if brokenFirstFrontP `qd` focalPoint > secondFrontPoint `qd` focalPoint
+                then (MergeState (head secondFront)      (tail secondFront)      (Just $ head brokenFirstFront) (tail brokenFirstFront)
+                        , StartSegBreak Far  <$> brokenFirstFrontSegMay)
+                else (MergeState (head brokenFirstFront) (tail brokenFirstFront) (Just $ head secondFront)      (tail secondFront)
+                        , StartSegBreak Near <$> brokenFirstFrontSegMay)
+            else (MergeState (head secondFront) (tail secondFront) Nothing brokenFirstFront, StartSegBreak Far <$> brokenFirstFrontSegMay)
+    where
+
+        aSpread = spreadX2 a1
+        bSpread = spreadX2 b1
+
+        (firstFront, secondFront, secondFrontSpr, secondFrontPoint) = if aSpread > bSpread
+            then (allBs, allAs, aSpread, a1)
+            else (allAs, allBs, bSpread, b1)
+
+        -- rotate the first front till the second front's point is on or before the rotated second fronts first segment.
+        -- If no such rotaton exists, then the second spred must be at the end of all the first front's segments (in an empty space).
+        (brokenFirstFront@((_, Seg brokenFirstFrontP _):_), brokenFirstFrontSegMay, brokenFirstFrontStartsOnNonEmptySpace) = breakAt secondFrontSpr secondFrontPoint firstFront
+
+        breakAt :: Spr p -> Pos p -> [ShadowFrontSeg label p] -> ([ShadowFrontSeg label p], Maybe (ShadowFrontSeg label p), Bool)
+        breakAt spr sprP (xs) = fromMaybe (xs, Nothing, False) $ headMay $ mapMaybe isGoodStart (rotations xs)
+            where
+                isGoodStart :: [ShadowFrontSeg label p] -> Maybe ([ShadowFrontSeg label p], Maybe (ShadowFrontSeg label p), Bool)
+                isGoodStart frontSegs@((l, Seg c d):rest)
+                    | sprC > spr                = Just (frontSegs, Nothing, False)
+                    | isOnSpr spr sprC sprD   = case lineIntersection (line' focalPoint sprP) (line' c (d - c)) of
+                                                            LPoint p    -> let breakSegMay = do s <- seg c p; return (l, s)
+                                                                            in Just (((maybeToList $ do s <- seg p d; return (l, s)) ++ rest ++ (maybeToList breakSegMay)), breakSegMay, True)
+                                                            -- anything else just don't break... This case is mathematically impossible, but may happen due to rounding errors.
+                                                            _           -> Just (frontSegs, Nothing, True)
+                                                    
+                    | otherwise                 = Nothing
+                    where
+                        sprC = spreadX2 c
+                        sprD = spreadX2 d
+
+
+
+
 
 
 -- TODO how do you resolve overlapping fronts?!?!?!?!
@@ -60,10 +153,11 @@ shadowFronts :: forall ss p. (Ord p, Num p, Fractional p, HasSeg ss p
 
                     , Show ss, Show p)
 
-                => Pos p        -- ^ focal point
-                -> [ss]         -- ^ all the segments
-                -> [[ss]]       -- ^ front segments
-shadowFronts focalPoint hasSegs = fronts
+                => Pos p          -- ^ focal point
+                -> [ss]           -- ^ all the segments
+                -> Maybe [Seg p]  -- ^ Filter segments
+                -> [[ss]]         -- ^ front segments
+shadowFronts focalPoint hasSegs filterSegs = fronts
     where
 
         ssAll :: Vector ss
@@ -170,6 +264,7 @@ shadowFronts focalPoint hasSegs = fronts
                     doRayCastWithLines ray@(Ray f _) segIxs = 
                         [(p, segIx)     | (line, segIx) <- zip lines segIxs
                                         -- , let LRPoint p = traceShow ("initialHotEdges", initialHotEdges, ray, line, lineRayIntersection line ray) $ lineRayIntersection line ray  -- as the segs must not be colinear with the focalpoint, all intersections must be points
+                                        -- TODO: I managed to get this to fail once (using Floats): the result was not an LRPoint
                                         , let LRPoint p = lineRayIntersection line ray  -- as the segs must not be colinear with the focalpoint, all intersections must be points
                                         , then sortWith by quadrance (p - f)]
                         where

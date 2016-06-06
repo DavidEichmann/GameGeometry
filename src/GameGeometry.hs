@@ -7,5 +7,5 @@ module GameGeometry (
 import Geometry.Geometry        as ToExport
 import Geometry.BoundedGeometry as ToExport
 import Geometry.RayTrace        as ToExport
-import Geometry.Shadows        as ToExport
+import Geometry.Shadows         as ToExport
 import Utils

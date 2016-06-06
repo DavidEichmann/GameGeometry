@@ -8,8 +8,8 @@ import Data.Fixed
 import Geometry.Geometry
 import Linear
 
-newtype Spr1 a = Spr1 { unSpr1 :: a } deriving (Show, Eq)   -- ^ original definition of spread. In the range [0, 1]
-newtype Spr a = Spr { unSpr :: a } deriving (Show, Eq)     -- ^ spread over the 4 quadrants. In the range [0, 4)
+newtype Spr1 a = Spr1 { unSpr1 :: a } deriving (Show, Eq, Ord)   -- ^ original definition of spread. In the range [0, 1]
+newtype Spr a = Spr { unSpr :: a } deriving (Show, Eq, Ord)     -- ^ spread over the 4 quadrants. In the range [0, 4)
 
 data AngleWedge a = AngleWedge (Spr a) (Spr a)
 
@@ -53,3 +53,8 @@ spreadX v@(V2 _ y) = Spr1 (q / r)
     where
         r = quadrance v
         q = y ^^ 2
+
+-- can check by XORing (use (/=)) the three orderings
+-- this is inclusive
+isOnSpr :: Ord p => Spr p -> Spr p -> Spr p -> Bool
+isOnSpr point start end = ((point <= start) /= (point <= end)) /= (start < end)

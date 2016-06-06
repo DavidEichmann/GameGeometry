@@ -270,6 +270,18 @@ testsQuickCheck = testGroup "Property Tests" [
                     -> ((atan2Positive ay ax) `compare` (atan2Positive by bx)) === 
                         (unSpr (spreadX2 a) `compare` unSpr (spreadX2 b)))
 
+            , testProperty "a `isOnSpr` a a" $
+                (\(NonZero v) -> let s = spreadX2 v in s `isOnSpr` s s)
+
+            , testProperty "a `isOnSpr` a b" $
+                (\(NonZero v1) (NonZero v2) -> let a = spreadX2 v1; b = spreadX2 v2 in a `isOnSpr` a b)
+
+            , testProperty "a `isOnSpr` b a" $
+                (\(NonZero v1) (NonZero v2) -> let a = spreadX2 v1; b = spreadX2 v2 in a `isOnSpr` b a)
+
+            , testProperty "a /= b /= c ==> (a `isOnSpr` b c /= a `isOnSpr` c b)" $
+                (\(NonZero v1) (NonZero v2) (NonZero v3) -> let a = spreadX2 v1; b = spreadX2 v2; c = spreadX2 v3 in (a /= b && b /= c) ==> (a `isOnSpr` b c /= a `isOnSpr` c b))
+
         ]
 
         , testGroup "Primitives" [
