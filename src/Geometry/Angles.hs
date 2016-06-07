@@ -57,4 +57,4 @@ spreadX v@(V2 _ y) = Spr1 (q / r)
 -- can check by XORing (use (/=)) the three orderings
 -- this is inclusive
 isOnSpr :: Ord p => Spr p -> Spr p -> Spr p -> Bool
-isOnSpr point start end = ((point <= start) /= (point <= end)) /= (start < end)
+isOnSpr point start end = point == start || point == end || (((point <= start) /= (point <= end)) /= (start >= end))

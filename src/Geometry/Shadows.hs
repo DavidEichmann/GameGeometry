@@ -155,9 +155,8 @@ shadowFronts :: forall ss p. (Ord p, Num p, Fractional p, HasSeg ss p
 
                 => Pos p          -- ^ focal point
                 -> [ss]           -- ^ all the segments
-                -> Maybe [Seg p]  -- ^ Filter segments
                 -> [[ss]]         -- ^ front segments
-shadowFronts focalPoint hasSegs filterSegs = fronts
+shadowFronts focalPoint hasSegs = fronts
     where
 
         ssAll :: Vector ss
