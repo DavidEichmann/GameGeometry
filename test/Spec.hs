@@ -188,6 +188,29 @@ testsHUnit = testGroup "Unit Tests" [
                     expected = [a,b]
                 in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
 
+            , testCase "3 disjoint Segs" $
+                let
+                    focalPoint = r2 1 1
+                    segs@[a,b,c] = 
+                        [ seg' (r2 2 2) (r2 1 2)
+                        , seg' (r2 0 2) (r2 0 1)
+                        , seg' (r2 0 0) (r2 2 0)
+                        ]
+                    expected = [a,b,c]
+                in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
+
+            , testCase "4 disjoint Segs" $
+                let
+                    focalPoint = r2 1 1
+                    segs@[a,b,c,d] = 
+                        [ seg' (r2 2 2) (r2 1 2)
+                        , seg' (r2 0 2) (r2 0 1)
+                        , seg' (r2 0 0) (r2 2 0)
+                        , seg' (r2 2 0.1) (r2 2 0.2)
+                        ]
+                    expected = [a,b,c,d]
+                in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
+
             , testCase "Overlapping Segs" $
                 let
                     focalPoint = r2 1 1
