@@ -175,7 +175,7 @@ testsHUnit = testGroup "Unit Tests" [
                     focalPoint = r2 1 1
                     a = seg' (r2  2 1) (r2  1 2)
                     segs = [a]
-                    expected = [[a]]
+                    expected = [a]
                 in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
 
             , testCase "2 Segs" $
@@ -185,7 +185,7 @@ testsHUnit = testGroup "Unit Tests" [
                         [ seg' (r2   2  1) (r2   1    2)
                         , seg' (r2 (-2) 0) (r2 (-2) (-2))
                         ]
-                    expected = [[a],[b]]
+                    expected = [a,b]
                 in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
 
             , testCase "Overlapping Segs" $
@@ -198,8 +198,8 @@ testsHUnit = testGroup "Unit Tests" [
                         ]
                     
                     expected = [
-                            [seg' (r2 1.5 1) (r2 1.5 1.5), seg' (r2 1.5 1.5) (r2 1 2)],
-                            [c]
+                            seg' (r2 1.5 1) (r2 1.5 1.5), seg' (r2 1.5 1.5) (r2 1 2),
+                            c
                         ]
                 in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
 
@@ -215,8 +215,9 @@ testsHUnit = testGroup "Unit Tests" [
                         , seg' (r2   20 (-10)) (r2   20 10)
                         ]
                     expected = [
-                            [d,c],
-                            [seg' (r2 20 (-10)) (r2 20 (-2)), e, seg' (r2 20 2) (r2 20 10)]
+                            d,
+                            c,
+                            seg' (r2 20 (-10)) (r2 20 (-2)), e, seg' (r2 20 2) (r2 20 10)
                         ]
                 in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
 
@@ -232,8 +233,8 @@ testsHUnit = testGroup "Unit Tests" [
                         , seg' (r2 30  0) (r2 30 20)
                         ]
                     expected = [
-                            [d,c],
-                            [seg' (r2 30 0) (r2 30 8), e, seg' (r2 30 12) (r2 30 20)]
+                            d,c,
+                            seg' (r2 30 0) (r2 30 8), e, seg' (r2 30 12) (r2 30 20)
                         ]
                 in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
 
@@ -250,8 +251,9 @@ testsHUnit = testGroup "Unit Tests" [
                         , ("f", seg' (r2 30  0) (r2 30 20))
                         ]
                     expected = [
-                            [d,c],
-                            [("f", seg' (r2 30 0) (r2 30 8)), e, ("f", seg' (r2 30 12) (r2 30 20))]
+                            d,
+                            c,
+                            ("f", seg' (r2 30 0) (r2 30 8)), e, ("f", seg' (r2 30 12) (r2 30 20))
                         ]
                 in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
         ]

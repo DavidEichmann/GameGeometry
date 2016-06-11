@@ -159,7 +159,7 @@ class Lineable a c where
     toLine :: a -> Line c
 
 instance (Eq c, Num c) =>  Lineable (Seg c) c where
-    toLine (Seg a b) = line' a (b - a)
+    toLine (Seg a b) = Line' a (b - a)
 
 data LineIntersectT p
     = LTLine
