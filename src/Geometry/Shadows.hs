@@ -48,63 +48,68 @@ empty :: ShadowFront l p
 empty = ShadowFront []
 
 toShadowFront :: forall l p. (Fractional p, Ord p, Show p, Show l) => Pos p -> [(l, Seg p)] -> ShadowFront l p    -- this is O(n log(n)) by using divide and conquer (and merge)
-toShadowFront _ [] = empty
-toShadowFront focalPoint [(l, s@(Seg a b))] = if colinear s 
-    then empty
-    else ShadowFront . map tag . crossingX . direct $ s
+toShadowFront focalPoint labeledSegs
+    = ShadowFront
+    . mapMaybe (wlineToLabelSeg focalPoint)
+    . toShadowFront'
+    . concatMap (toWLines focalPoint)
+    $ labeledSegs
     where
-        colinear (Seg a b) = (a - focalPoint) `crossZ` (b - focalPoint) == 0
-        direct s@(Seg a b) = if (a - focalPoint) `crossZ` (b - a) > 0 then s else seg' b a
-        crossingX s@(Seg a b) = if isOnSpr (Spr 0) (spreadX2 $ a - focalPoint) (spreadX2 $ b - focalPoint)
-            then case lineIntersection (toLine s) (line' focalPoint (V2 1 0)) of
-                LPoint mid -> catMaybes [seg a mid, seg mid b]
-                _          -> []
-            else [s]
-        tag s = (l, s)
-toShadowFront focalPoint lss = merge focalPoint (toShadowFront focalPoint lss1) (toShadowFront focalPoint lss2)
-    where
-        (lss1, lss2) = splitAt (length lss `div` 2) lss
-
--- toShadowFront focalPoint lss = relabel (toShadowFront' (zipWith (\ix (l, s) -> ((SegIx ix,l), s)) [0..] lss))
---     where
---         labels = V.fromList (map fst lss)
---         relabel (ShadowFront ss) =  ShadowFront $ map (\(ix, s) -> (labels!ix, s)) ss
-
---         toShadowFront' :: (Fractional p, Ord p, Show p) => [(SegIx, Seg p)] -> ShadowFront SegIx p    -- this is O(n log(n)) by using divide and conquer (and merge)
---         toShadowFront' ss = shadowFronts
---             where
---                 shadowFronts = case ss of
---                     []         -> empty
---                     [(ix, s)] -> if colinear s then empty else ShadowFront . map (tag ix) . crossingX . direct $ s
---                     ss         -> merge focalPoint (toShadowFront' ss1) (toShadowFront' ss2)
-
---                 (ss1, ss2) = splitAt (length ss `div` 2) ss
-
---                 colinear (Seg a b) = (a - focalPoint) `crossZ` (b - focalPoint) == 0
---                 direct s@(Seg a b) = if (a - focalPoint) `crossZ` (b - a) > 0 then s else seg' b a
---                 crossingX s@(Seg a b) = if isOnSpr (Spr 0) (spreadX2 $ a - focalPoint) (spreadX2 $ b - focalPoint)
---                     then case lineIntersection (toLine s) <$> line focalPoint (V2 1 0) of
---                         Just (LPoint mid) -> catMaybes [seg mid b, seg a mid]
---                         _                 -> []
---                     else [s]
-
---                 tag ix s@(Seg a b) = (LIDS l ix ((spreadX2 $ a - focalPoint, a), (let Spr sB = spreadX2 $ b - focalPoint in if sB == 0 then Spr 4 else Spr sB, b)), s)
-
--- TODO look for incorrect Spreads in merge!!!!!!!!!!!!!!
+        toShadowFront' :: [WLine l p] -> [WLine l p]
+        toShadowFront' []       = []
+        toShadowFront' [wline]  = [wline]
+        toShadowFront' lss      = merge'' focalPoint (toShadowFront' lss1) (toShadowFront' lss2)
+            where
+                (lss1, lss2) = splitAt (length lss `div` 2) lss
 
 -- a segment represented by a spread(P) range and a line
-data WLine l p = WLine l ((Spr p,Pos p), (Spr p, Pos p)) (Line p)
+data WLine l p = WLine l ((p,Pos p), (p, Pos p)) (Line p)
     deriving (Show)
 
-toWLine :: (Ord p, Fractional p) => Pos p -> (l, Seg p) -> WLine l p
-toWLine focalPoint (l, s@(Seg a b)) = WLine l ((spreadX2 $ a - focalPoint, a), (spreadX2 $ b - focalPoint, b)) (toLine s)
+wlineToLabelSeg :: (Eq p, Ord p, Fractional p) => Pos p -> WLine l p -> Maybe (l, Seg p)
+wlineToLabelSeg focalPoint (WLine l ((aS, aP), (bS, bP)) cLine) = do
+    -- Single segment, so try and find points of intersection with wedge rays
+    aRay <- ray focalPoint (aP - focalPoint)
+    bRay <- ray focalPoint (bP - focalPoint)
+    pointA <- case lineRayIntersection cLine aRay of LRPoint p -> Just p; _ -> Nothing
+    pointB <- case lineRayIntersection cLine bRay of LRPoint p -> Just p; _ -> Nothing
+    s <- seg pointA pointB
+    return (l, s)
+
+
+toWLines :: (Ord p, Fractional p) => Pos p -> (l, Seg p) -> [WLine l p]
+toWLines focalPoint (l, s@(Seg aInit bInit))
+    = if isColinear
+        then []
+        else if aS > bS
+            then case lineIntersection directedLine (line' focalPoint (V2 1 0)) of
+                LPoint mid -> catMaybes [
+                                    WLine l (( 0, mid), (bS,   b)) <$> line mid (  b - mid),
+                                    WLine l ((aS,   a), ( 4, mid)) <$> line   a (mid -   a)
+                                ]
+                _          -> []
+            else [WLine l ((aS, a), (bS, b)) directedLine]
+
+    where
+        aInitV              = aInit - focalPoint
+        bInitV              = bInit - focalPoint
+        aInitS              = unSpr $ spreadX2 aInitV
+        bInitS              = unSpr $ spreadX2 bInitV
+
+        isColinear  = aInitV `crossZ` bInitV == 0
+
+        (directed@(Seg a b), aS, bS)
+                    = if aInitV `crossZ` (bInit - aInit) > 0
+                                then (s, aInitS, bInitS)
+                                else (seg' bInit aInit, bInitS, aInitS)
+        directedLine = toLine directed
 
 merge :: forall p l. (Ord p, Fractional p, Num p, Show p, Show l)
       => Pos p
       -> ShadowFront l p
       -> ShadowFront l p
       -> ShadowFront l p
-merge focalPoint (ShadowFront as) (ShadowFront bs) = ShadowFront . joinSegs $ merge'' (map (toWLine focalPoint) as) (map (toWLine focalPoint) bs)
+merge focalPoint (ShadowFront as) (ShadowFront bs) = ShadowFront . joinSegs . mapMaybe (wlineToLabelSeg focalPoint) $ merge'' focalPoint (concatMap (toWLines focalPoint) as) (concatMap (toWLines focalPoint) bs)
     where
 
 
@@ -132,13 +137,17 @@ merge focalPoint (ShadowFront as) (ShadowFront bs) = ShadowFront . joinSegs $ me
 
 
 
-        merge'' :: [WLine l p] -> [WLine l p] -> [(l, Seg p)]
-        merge'' as bs = concatMap mergeWedge $ toWedges as bs
-
+merge'' :: forall p l. (Ord p, Fractional p, Num p, Show p, Show l)
+    => Pos p
+    -> [WLine l p]
+    -> [WLine l p]
+    -> [WLine l p]
+merge'' focalPoint as bs = concatMap mergeWedge $ toWedges as bs
+    where
         -- break into wedges
         toWedges :: [WLine l p]
                  -> [WLine l p]
-                 -> [(((Spr p, Pos p), (Spr p, Pos p)), Either (l, Line p) ((l, Line p), (l, Line p)))]
+                 -> [(((p, Pos p), (p, Pos p)), Either (l, Line p) ((l, Line p), (l, Line p)))]
                     -- ^ [((start/end spread and point on spreads), either 1 or 2 labeled segments (unaltered))]
         toWedges [] [] = []
         toWedges as [] = map (\c@(WLine cL cSSPs cLine) -> (cSSPs, Left (cL, cLine))) as
@@ -173,18 +182,12 @@ merge focalPoint (ShadowFront as) (ShadowFront bs) = ShadowFront . joinSegs $ me
         maybeToList' _ (Just x) = [x]
         maybeToList' msg _ = [] -- error msg
 
-        mergeWedge :: (((Spr p, Pos p), (Spr p, Pos p)), Either (l, Line p) ((l, Line p), (l, Line p)))
-                   -> [(l, Seg p)]
+        mergeWedge :: (((p, Pos p), (p, Pos p)), Either (l, Line p) ((l, Line p), (l, Line p)))
+                   -> [WLine l p]
         mergeWedge (((aS, aP), (bS, bP)), wlines)
             = case wlines of
                 -- Single segment, so try and find points of intersection with wedge rays
-                Left (cL, cLine) -> maybeToList' "a" $ do
-                    aRay <- ray focalPoint (aP - focalPoint)
-                    bRay <- ray focalPoint (bP - focalPoint)
-                    pointA <- case lineRayIntersection cLine aRay of LRPoint p -> Just p; _ -> Nothing
-                    pointB <- case lineRayIntersection cLine bRay of LRPoint p -> Just p; _ -> Nothing
-                    s <- seg pointA pointB
-                    return (cL, s)
+                Left (cL, cLine) -> [WLine cL ((aS, aP), (bS, bP)) cLine]
 
                 Right ((uL, uLine), (vL, vLine)) -> fromMaybe [] $ do
                     -- get wedge rays
@@ -197,134 +200,42 @@ merge focalPoint (ShadowFront as) (ShadowFront bs) = ShadowFront . joinSegs $ me
                         -- The case we expect!
                         (LRPoint uaP, LRPoint ubP, LRPoint vaP, LRPoint vbP) ->
                             let
-                                full1May = (uL,) <$> seg uaP ubP
-                                full2May = (vL,) <$> seg vaP vbP
+                                -- TODO could retain intersection result instead of recalculating later.
+                                full1 = WLine uL ((aS, aP), (bS, bP)) uLine
+                                full2 = WLine vL ((aS, aP), (bS, bP)) vLine
                                 midPMay  = case lineIntersection uLine vLine of LPoint p -> Just p; _ -> Nothing
-                                arbMay   = full1May `mplus` full2May
+                                arbMay   = full1
                             in case (compare (uaP `qd` focalPoint) (vaP `qd` focalPoint), compare (ubP `qd` focalPoint) (vbP `qd` focalPoint)) of
                                 -- Segments are on top of each other... just pick an arbitrary one
-                                (EQ, EQ) -> maybeToList' "b" arbMay
+                                (EQ, EQ) -> [arbMay]
 
                                 -- = shape. take the closer one
-                                (LT, LT) -> maybeToList' "c" full1May
-                                (GT, GT) -> maybeToList' "d" full2May
+                                (LT, LT) -> [full1]
+                                (GT, GT) -> [full2]
 
                                 -- > or < shape. Pick the one that is in front on at least one side
-                                (EQ, LT) -> maybeToList' "e" $ full1May `mplus` full2May
-                                (EQ, GT) -> maybeToList' "f" $ full2May `mplus` full1May
-                                (LT, EQ) -> maybeToList' "g" $ full1May `mplus` full2May
-                                (GT, EQ) -> maybeToList' "h" $ full2May `mplus` full1May
+                                (EQ, LT) -> [full1]
+                                (LT, EQ) -> [full1]
+                                (EQ, GT) -> [full2]
+                                (GT, EQ) -> [full2]
 
                                 -- X shape.
                                 -- if mid point is invalid, then just use arbitrary full segment
-                                (LT, GT) -> maybe (maybeToList' "i" arbMay) (\midP -> catMaybes [
-                                        (uL,) <$> seg uaP midP,
-                                        (vL,) <$> seg midP vbP
+                                (LT, GT) -> maybe [arbMay] (\midP -> let midS = unSpr $ spreadX2 (midP - focalPoint) in [
+                                        WLine uL ((aS, aP), (midS, midP)) uLine,
+                                        WLine vL ((midS, midP), (bS, bP)) vLine
                                     ]) midPMay
-                                (GT, LT) -> maybe (maybeToList' "j" arbMay) (\midP -> catMaybes [
-                                        (vL,) <$> seg vaP midP,
-                                        (uL,) <$> seg midP ubP
+                                (GT, LT) -> maybe [arbMay] (\midP -> let midS = unSpr $ spreadX2 (midP - focalPoint) in [
+                                        WLine vL ((aS, aP), (midS, midP)) vLine,
+                                        WLine uL ((midS, midP), (bS, bP)) uLine
                                     ]) midPMay
 
                         -- one of the segs appears invalid... just use the other seg
-                        (LRPoint uaP, LRPoint ubP, _, _) -> maybeToList' "k" $ (uL,) <$> seg uaP ubP
-                        (_, _, LRPoint vaP, LRPoint vbP) -> maybeToList' "l" $ (vL,) <$> seg vaP vbP
+                        (LRPoint uaP, LRPoint ubP, _, _) -> [WLine uL ((aS, aP), (bS, bP)) uLine] -- seg uaP ubP
+                        (_, _, LRPoint vaP, LRPoint vbP) -> [WLine vL ((aS, aP), (bS, bP)) vLine] -- seg vaP vbP
                         -- both segs appear invalid... drop this wedge
                         _ -> []
 
-
-
-
-
-        -- merge' [] bs = bs
-        -- merge' as [] = as
-        -- merge' (als@(al, a@(Seg a1 a2)):as) (bls@(bl, b@(Seg b1 b2)):bs)
-        --     = case (aChop1May, aChop2May, bChop1May, bChop2May) of
-        --         (Just aIn,  aOutMay,   Nothing,        _)                                   -> aIn : merge' (maybeToList aOutMay ++ as) (bls:bs)
-        --         ( Nothing,        _,  Just bIn,  bOutMay)                                   -> bIn : merge' (als:as) (maybeToList bOutMay ++ bs)
-        --         (Just aIn@(aInl, Seg aInA aInB),  aOutMay,  Just bIn@(bInl, Seg bInA bInB),  bOutMay)   -> merged ++ merge' (maybeToList bOutMay ++ bs) (maybeToList aOutMay ++ as)
-        --             where
-
-        --                 merged
-        --                     | aInAQ <= bInAQ && aInBQ <= bInBQ  = [aIn]
-        --                     | aInAQ  > bInAQ && aInBQ  > bInBQ  = [bIn]
-        --                     | otherwise                         = catMaybes [firstSegMay, secondSegMay]
-                            
-        --                 aInAQ = aInA `qd` focalPoint
-        --                 aInBQ = aInB `qd` focalPoint
-        --                 bInAQ = bInA `qd` focalPoint
-        --                 bInBQ = bInB `qd` focalPoint
-
-        --                 midSpr = spreadX2 $ mid - focalPoint
-        --                 mid = case lineIntersection (toLine $ snd aIn) (toLine $ snd bIn) of
-        --                         LPoint p -> p
-        --                         _        -> error "always expected a point intersection in a wedge."
-
-
-        --                 firstSegMay = if aInAQ < bInAQ
-        --                     then (aInl { lidsSprs = (fst $ lidsSprs aInl, midSpr)},) <$> seg aInA mid
-        --                     else (bInl { lidsSprs = (fst $ lidsSprs bInl, midSpr)},) <$> seg bInA mid
-
-        --                 secondSegMay = if aInBQ < bInBQ
-        --                     then (aInl { lidsSprs = (midSpr, snd $ lidsSprs aInl)},) <$> seg mid aInB
-        --                     else (bInl { lidsSprs = (midSpr, snd $ lidsSprs bInl)},) <$> seg mid bInB
-
-        --         -- Rounding error cases
-        --         (Nothing,   Nothing,         _,        _)  -> merge' as (bls:bs)
-        --         (      _,         _,   Nothing,  Nothing)  -> merge' (als:as) bs
-        --         _ -> error "Not matching chop results"
-
-        --     where
-        --         a1Q = a1 `qd` focalPoint
-        --         a2Q = a2 `qd` focalPoint
-        --         b1Q = b1 `qd` focalPoint
-        --         b2Q = b2 `qd` focalPoint
-
-        --         -- assume that not all spreads are equal
-        --         -- get the first and second spread and representative points
-        --         (_:((chopS, chopP):_):chopSPs)
-        --             = groupBy (\(c1S,_) (c2S, _) -> c1S == c2S)
-        --             . sortOn fst
-        --             $ [(fst $ lidsSprs al, a1),
-        --                (snd $ lidsSprs al, a2),
-        --                (fst $ lidsSprs bl, b1),
-        --                (snd $ lidsSprs bl, b2)]
-
-        --         (chopS', chopP') = head $ head chopSPs
-
-        --         -- chop
-        --         ((aChop1May, aChop2May), (bChop1May, bChop2May))
-        --             = let choped = (chop chopP als, chop chopP bls)
-        --             in case choped of
-        --                 ((Nothing, Just _), (Nothing, Just _)) -> (chop chopP' als, chop chopP' bls)
-        --                 _                                      -> choped
-
-
-        -- -- TODO: chop both... snds go into recursive call, fsts are merged: 1 -> just 1, 2 -> intersection?
-
-        -- chop :: Pos p -> (LIDS l p, Seg p) -> (Maybe (LIDS l p, Seg p), Maybe (LIDS l p, Seg p))
-        -- chop p lidsSeg@(LIDS l ix (aS, bS), s@(Seg a b))
-        --     -- In Wedge
-        --     | pS >= bS  = (Just lidsSeg, Nothing)
-        --     -- After Wedge
-        --     | pS <= aS  = (Nothing, Just lidsSeg)
-        --     -- On Wedge
-        --     | otherwise = maybe (Nothing, Nothing) (\(mid, midS) -> (
-        --                                                 sequence (LIDS l ix (aS, midS), seg a mid),
-        --                                                 sequence (LIDS l ix (midS, bS), seg mid b))) midmidSMay
-        --     where
-        --         pS = spreadX2 (p - focalPoint)
-
-        --         midmidSMay = do
-        --             rayLine <- line focalPoint (p - focalPoint)
-        --             mid
-        --                 <- case lineIntersection (toLine s) rayLine of
-        --                     LPoint m -> Just m
-        --                     _ -> Nothing
-        --             let midS = spreadX2 (mid - focalPoint)
-        --             if midS < aS || midS > bS
-        --                 then Nothing
-        --                 else Just (mid, midS)
 
 filterByFront :: ShadowFront l p -> ShadowFront l p -> ShadowFront l p
 filterByFront = undefined
