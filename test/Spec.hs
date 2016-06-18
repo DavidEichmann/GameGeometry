@@ -176,7 +176,7 @@ testsHUnit = testGroup "Unit Tests" [
                     a = seg' (r2  2 1) (r2  1 2)
                     segs = [a]
                     expected = [a]
-                in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
+                in elem (shadowFrontToHasSegs $ hasSegsToShadowFront focalPoint Nothing segs) (Utils.rotations expected) @?= True
 
             , testCase "2 Segs" $
                 let
@@ -186,7 +186,7 @@ testsHUnit = testGroup "Unit Tests" [
                         , seg' (r2 (-2) 0) (r2 (-2) (-2))
                         ]
                     expected = [a,b]
-                in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
+                in elem (shadowFrontToHasSegs $ hasSegsToShadowFront focalPoint Nothing segs) (Utils.rotations expected) @?= True
 
             , testCase "3 disjoint Segs" $
                 let
@@ -197,7 +197,7 @@ testsHUnit = testGroup "Unit Tests" [
                         , seg' (r2 0 0) (r2 2 0)
                         ]
                     expected = [a,b,c]
-                in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
+                in elem (shadowFrontToHasSegs $ hasSegsToShadowFront focalPoint Nothing segs) (Utils.rotations expected) @?= True
 
             , testCase "4 disjoint Segs" $
                 let
@@ -209,7 +209,7 @@ testsHUnit = testGroup "Unit Tests" [
                         , seg' (r2 2 0.1) (r2 2 0.2)
                         ]
                     expected = [a,b,c,d]
-                in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
+                in elem (shadowFrontToHasSegs $ hasSegsToShadowFront focalPoint Nothing segs) (Utils.rotations expected) @?= True
 
             , testCase "Overlapping Segs" $
                 let
@@ -224,7 +224,7 @@ testsHUnit = testGroup "Unit Tests" [
                             seg' (r2 1.5 1) (r2 1.5 1.5), seg' (r2 1.5 1.5) (r2 1 2),
                             c
                         ]
-                in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
+                in elem (shadowFrontToHasSegs $ hasSegsToShadowFront focalPoint Nothing segs) (Utils.rotations expected) @?= True
 
             , testCase "Doc example origin" $
                 let
@@ -242,7 +242,7 @@ testsHUnit = testGroup "Unit Tests" [
                             c,
                             seg' (r2 20 (-10)) (r2 20 (-2)), e, seg' (r2 20 2) (r2 20 10)
                         ]
-                in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
+                in elem (shadowFrontToHasSegs $ hasSegsToShadowFront focalPoint Nothing segs) (Utils.rotations expected) @?= True
 
             , testCase "Doc example" $
                 let
@@ -259,7 +259,7 @@ testsHUnit = testGroup "Unit Tests" [
                             d,c,
                             seg' (r2 30 0) (r2 30 8), e, seg' (r2 30 12) (r2 30 20)
                         ]
-                in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
+                in elem (shadowFrontToHasSegs $ hasSegsToShadowFront focalPoint Nothing segs) (Utils.rotations expected) @?= True
 
 
             , testCase "Doc example with labels" $
@@ -278,7 +278,27 @@ testsHUnit = testGroup "Unit Tests" [
                             c,
                             ("f", seg' (r2 30 0) (r2 30 8)), e, ("f", seg' (r2 30 12) (r2 30 20))
                         ]
-                in elem (shadowFronts focalPoint segs) (Utils.rotations expected) @?= True
+                in elem (shadowFrontToHasSegs $ hasSegsToShadowFront focalPoint Nothing segs) (Utils.rotations expected) @?= True
+        ]
+
+
+        , testGroup "Filtered Shadow fronts" [
+
+            testCase "1 Filter: part of seg + remove seg. " $
+                let
+                    focalPoint = r2 10 10
+                    segs@[a,b] =
+                        [ ("a", seg' (r2  20 20) (r2   0 20))
+                        , ("b", seg' (r2   0  0) (r2  30  0))
+                        ]
+                    filters =
+                        [ ("filter", seg' (V2 11 15) (V2 9 15))
+                        ]
+                    expected = [
+                            ("a", seg' (r2 12 20) (r2 8 20))
+                        ]
+                in elem (shadowFrontToHasSegs $ hasSegsToShadowFront focalPoint (Just filters) segs) (Utils.rotations expected) @?= True
+
         ]
     ]
 
@@ -419,6 +439,21 @@ testsQuickCheck = testGroup "Property Tests" [
                     -- ensure the offsetVector is not along the segment or at least is far enough to escape the segment.
                     offsetVector `crossZ` (a-b) > 0 || (quadrance offsetVector > quadrance (1-b)) ==>
                     pointSegIntersection (a + offsetVector) s == Nothing)
+        ]
+
+        , testGroup "Shadows" [
+
+              testProperty "Merge with self == self" $
+                (\(segs :: [(Int, Seg TestType)]) focalPoint ->
+                    let sf = toShadowFront focalPoint Nothing segs
+                    in sf === merge focalPoint sf sf)
+
+            , testProperty "Merge with part of self == self" $
+                (\(segs :: [(Int, Seg TestType)]) focalPoint ->
+                    let
+                        sf     = toShadowFront focalPoint Nothing segs
+                        sfPart = toShadowFront focalPoint Nothing (drop 5 $ take 10 $ segs)
+                    in sf === merge focalPoint sf sfPart)
         ]
     ]
 

@@ -6,12 +6,18 @@
 {-# LANGUAGE TupleSections #-}
 
 module Geometry.Shadows (
-          shadowFronts
+
+          ShadowFront
+
+        , hasSegsToShadowFront
+        , shadowFrontToHasSegs
+
         , toShadowFront
+        , toLabeledSegs
+
         , merge
         , filterMerge
 
-        , ShadowFront(..)
         , SegIx(..)
         -- , initialMergeState
         -- , MergeState
@@ -35,46 +41,18 @@ import qualified Data.Set as S
 import Debug.Trace
 
 
-type ShadowFrontSeg l p = (l, Seg p) -- (l, spreadX2, squareDist from focal point, point)
 -- list or segments ordered by SpreadX2 and split by empty space. Ther is no "visual" overlap about the focal point
 -- elements always have atleadt 2 elements (a single segment)
 -- first element is the START of a segment after SpreadX2 == 0 (i.e. the point after )
-newtype ShadowFront l p = ShadowFront { unShadowFront :: [ShadowFrontSeg l p] }
+-- a segment represented by a spread(P) range and a line
+newtype ShadowFront l p = ShadowFront { unShadowFront :: [WLine l p] }
     deriving (Show)
 
-toLabeledSegs :: ShadowFront l p -> [(l, Seg p)]
-toLabeledSegs (ShadowFront xs) = xs
-
-empty :: ShadowFront l p
-empty = ShadowFront []
-
-toShadowFront :: forall l p. (Fractional p, Ord p, Show p, Show l) => Pos p -> Maybe [(l, Seg p)] -> [(l, Seg p)] -> ShadowFront l p    -- this is O(n log(n)) by using divide and conquer (and merge)
-toShadowFront focalPoint filterLabeledSegsMay labeledSegs
-    = ShadowFront
-    . mapMaybe (wlineToLabelSeg focalPoint)
-    . toShadowFront'
-    . applyFilter
-    . concatMap (toWLines focalPoint)
-    $ labeledSegs
-    where
-        applyFilter :: [WLine l p] -> [WLine l p]
-        applyFilter = case filterLabeledSegsMay of
-            Nothing   -> id
-            Just flts -> concatMap (filterMerge' focalPoint (filterWLines flts) . (:[]))
-
-        filterWLines :: [(l, Seg p)] -> [WLine l p]
-        filterWLines = toShadowFront' . concatMap (toWLines focalPoint)
-
-        toShadowFront' :: [WLine l p] -> [WLine l p]
-        toShadowFront' []       = []
-        toShadowFront' [wline]  = [wline]
-        toShadowFront' lss      = merge' focalPoint (toShadowFront' lss1) (toShadowFront' lss2)
-            where
-                (lss1, lss2) = splitAt (length lss `div` 2) lss
-
--- a segment represented by a spread(P) range and a line
 data WLine l p = WLine l ((p,Pos p), (p, Pos p)) (Line p)
     deriving (Show)
+
+toLabeledSegs :: (Eq p, Ord p, Fractional p) => Pos p -> ShadowFront l p -> [(l, Seg p)]
+toLabeledSegs focalPoint (ShadowFront wLines) = mapMaybe (wlineToLabelSeg focalPoint) wLines
 
 wlineToLabelSeg :: (Eq p, Ord p, Fractional p) => Pos p -> WLine l p -> Maybe (l, Seg p)
 wlineToLabelSeg focalPoint (WLine l ((aS, aP), (bS, bP)) cLine) = do
@@ -87,18 +65,32 @@ wlineToLabelSeg focalPoint (WLine l ((aS, aP), (bS, bP)) cLine) = do
     return (l, s)
 
 
-toWLines :: (Ord p, Fractional p) => Pos p -> (l, Seg p) -> [WLine l p]
+
+
+
+
+
+
+-- TODO: cross product may indicate the incorrect direction when the points are close.... instead, try to break on the x+ ray, then sort and flip according to spreads only!
+
+
+
+-- %%% make this part of the toShadowFront function
+toWLines :: (Ord p, Fractional p)
+         => Pos p
+         -> (l, Seg p)
+         -> ShadowFront l p
 toWLines focalPoint (l, s@(Seg aInit bInit))
     = if isColinear
-        then []
+        then empty
         else if aS > bS
             then case lineIntersection directedLine (line' focalPoint (V2 1 0)) of
-                LPoint mid -> catMaybes [
+                LPoint mid -> ShadowFront $ catMaybes [
                                     WLine l (( 0, mid), (bS,   b)) <$> line mid (  b - mid),
                                     WLine l ((aS,   a), ( 4, mid)) <$> line   a (mid -   a)
                                 ]
-                _          -> []
-            else [WLine l ((aS, a), (bS, b)) directedLine]
+                _          -> empty
+            else ShadowFront [WLine l ((aS, a), (bS, b)) directedLine]
 
     where
         aInitV              = aInit - focalPoint
@@ -114,8 +106,41 @@ toWLines focalPoint (l, s@(Seg aInit bInit))
                                 else (seg' bInit aInit, bInitS, aInitS)
         directedLine = toLine directed
 
+empty :: ShadowFront l p
+empty = ShadowFront []
+
+toShadowFront :: forall l p. (Fractional p, Ord p, Show p, Show l)
+    => Pos p
+    -> Maybe [(l, Seg p)]
+    -> [(l, Seg p)]
+    -> ShadowFront l p    -- this is O(n log(n)) (???are you sure???) by using divide and conquer (and merge)
+toShadowFront focalPoint filterLabeledSegsMay labeledSegs
+    -- divide, conquer, merge
+    = toShadowFront'
+    -- filter all  individual shadow fronts by the filter ([ShadowFront])
+    . map applyFilter
+    -- Convert single segs to shadow fronts ([ShadowFront])
+    . map (toWLines focalPoint)
+    $ labeledSegs
+    where
+        applyFilter :: ShadowFront l p -> ShadowFront l p
+        applyFilter = case filterLabeledSegsMay of
+            Nothing   -> id
+            Just flts -> filterMerge focalPoint (filterWLines flts) -- %%%  call toShadowFront for flts instead of what is being done here
+
+        -- %%% see last comment above, this us just a special case of toShadowFront
+        filterWLines :: [(l, Seg p)] -> ShadowFront l p
+        filterWLines = toShadowFront' . map (toWLines focalPoint)
+
+        toShadowFront' :: [ShadowFront l p] -> ShadowFront l p
+        toShadowFront' []       = ShadowFront []
+        toShadowFront' [f]      = f
+        toShadowFront' fs       = merge focalPoint (toShadowFront' fsA) (toShadowFront' fsB)  -- %%% instead of having a toShadowFront', can you do this at the top level?
+            where
+                (fsA, fsB) = splitAt (length fs `div` 2) fs
+
 -- TODO merge spreads across the positive x ray
-joinSegs :: [(l, Seg p)] -> [(l, Seg p)]
+joinSegs :: ShadowFront l p -> ShadowFront l p
 joinSegs = id
 
 filterMerge :: forall p l. (Ord p, Fractional p, Num p, Show p, Show l)
@@ -124,18 +149,10 @@ filterMerge :: forall p l. (Ord p, Fractional p, Num p, Show p, Show l)
       -> ShadowFront l p
       -> ShadowFront l p
 filterMerge focalPoint (ShadowFront filterSF) (ShadowFront sf)
-    = ShadowFront
-    . joinSegs
-    . mapMaybe (wlineToLabelSeg focalPoint)
-    . filterMerge' focalPoint (concatMap (toWLines focalPoint) filterSF)
-    $ concatMap (toWLines focalPoint) sf
-
-filterMerge' :: forall p l. (Ord p, Fractional p, Num p, Show p, Show l)
-       => Pos p
-       -> [WLine l p]
-       -> [WLine l p]
-       -> [WLine l p]
-filterMerge' focalPoint as bs = mapMaybe mergeWedge $ toWedges as bs
+    = joinSegs
+    . ShadowFront
+    . mapMaybe mergeWedge
+    $ toWedges filterSF sf
     where
         -- break into wedges
         toWedges :: [WLine l p]
@@ -227,32 +244,10 @@ merge :: forall p l. (Ord p, Fractional p, Num p, Show p, Show l)
       -> ShadowFront l p
       -> ShadowFront l p
 merge focalPoint (ShadowFront as) (ShadowFront bs)
-    = ShadowFront
-    . joinSegs
-    . mapMaybe (wlineToLabelSeg focalPoint)
-    . merge' focalPoint (concatMap (toWLines focalPoint) as)
-    $ concatMap (toWLines focalPoint) bs
-
-        -- joinSegs' :: [((LIDS l p), Seg p)] -> [((LIDS l p), Seg p)]
-        -- joinSegs' = mapMaybe joinSegsGroup
-        --          . groupBy ((==) `on` lidsID . fst)
-
-        -- joinSegsGroup :: [((LIDS l p), Seg p)] -> Maybe ((LIDS l p), Seg p)
-        -- joinSegsGroup [x]                                = Just x
-        -- joinSegsGroup ((LIDS l i (spra, _), Seg a _):xs) = sequence (LIDS l i (spra, sprb), seg a b)
-        --     where
-        --         (LIDS _ _ (_, sprb), Seg _ b) = last xs
-
-
-
-
-
-merge' :: forall p l. (Ord p, Fractional p, Num p, Show p, Show l)
-       => Pos p
-       -> [WLine l p]
-       -> [WLine l p]
-       -> [WLine l p]
-merge' focalPoint as bs = concatMap mergeWedge $ toWedges as bs
+    = joinSegs
+    . ShadowFront
+    . concatMap mergeWedge
+    $ toWedges as bs
     where
         -- break into wedges
         toWedges :: [WLine l p]
@@ -341,10 +336,12 @@ merge' focalPoint as bs = concatMap mergeWedge $ toWedges as bs
                                     ]) midPMay
 
                         -- one of the segs appears invalid... just use the other seg
+                        -- x@(LRPoint uaP, LRPoint ubP, _, _) -> error $ "second (v) is invalid\n((aS, aP), (bS, bP)): " ++ show ((aS, aP), (bS, bP)) ++ "\nfocalPoint: " ++ show focalPoint ++ "\n(uLine, vLine): " ++ show (uLine, vLine) ++ "\nintersections: " ++ show x
+                        -- x@(_, _, LRPoint vaP, LRPoint vbP) -> error $ "first (u) is invalid\n((aS, aP), (bS, bP)): " ++ show ((aS, aP), (bS, bP)) ++ "\nfocalPoint: " ++ show focalPoint ++ "\n(uLine, vLine): " ++ show (uLine, vLine) ++ "\nintersections: " ++ show x
                         (LRPoint uaP, LRPoint ubP, _, _) -> [WLine uL ((aS, aP), (bS, bP)) uLine] -- seg uaP ubP
                         (_, _, LRPoint vaP, LRPoint vbP) -> [WLine vL ((aS, aP), (bS, bP)) vLine] -- seg vaP vbP
                         -- both segs appear invalid... drop this wedge
-                        _ -> []
+                        _ -> error "2 invalid segments in merge wedge" -- []
 
 
 filterByFront :: ShadowFront l p -> ShadowFront l p -> ShadowFront l p
@@ -352,7 +349,6 @@ filterByFront = undefined
 
 
 -- TODO how do you resolve overlapping fronts?!?!?!?!
-
 
 -- | Given a bunch of (possibly annotated) segments and a focal point, this will calculate the "shaddow fronts".
 -- This is all the connected immediatelly visible segments from the focal point (X). These segments may be cut:
@@ -384,14 +380,16 @@ filterByFront = undefined
 --
 -- Grouped by connected runs e.g. in the above case: [[D,C],[F,E,F]]
 
-shadowFronts :: (Ord p, Num p, Fractional p, Show p, Show ss, HasSeg ss p)
-             => Pos p -> Maybe [ss] -> [ss] -> [ss]
-shadowFronts focalPoint filterHasSegsMay hasSegs
-    = map (\(l, s) -> setSeg s l)
-    . unShadowFront
-    . toShadowFront focalPoint (map ((undefined,) . getSeg) <$> filterHasSegsMay)
+shadowFrontToHasSegs :: (Eq p, Ord p, Fractional p, HasSeg ss p) => Pos p -> ShadowFront ss p -> [ss]
+shadowFrontToHasSegs focalPoint = map (\(l, s) -> setSeg s l) . toLabeledSegs focalPoint
+
+hasSegsToShadowFront :: (Ord p, Num p, Fractional p, Show p, Show ss, HasSeg ss p)
+             => Pos p -> Maybe [ss] -> [ss] -> ShadowFront ss p
+hasSegsToShadowFront focalPoint filterHasSegsMay hasSegs
+    = toShadowFront focalPoint (map ((undefined,) . getSeg) <$> filterHasSegsMay)
     . map (\hs -> (hs, getSeg hs))
     $ hasSegs
+
 
 -- shadowFronts' :: forall ss p. (Ord p, Num p, Fractional p, HasSeg ss p
 
