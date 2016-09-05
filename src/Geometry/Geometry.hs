@@ -2,20 +2,14 @@
 {-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 
 module Geometry.Geometry (
 
-          Line
-        , Ray
-        , Seg
-        , Polygon
-
-        , pattern Line
-        , pattern Ray
-        , pattern Seg
-        , pattern Polygon
+          Line (..)
+        , Ray (..)
+        , Seg (..)
+        , Polygon (..)
 
         , line
         , line'
@@ -51,6 +45,10 @@ module Geometry.Geometry (
         , HasSeg (..)
         , Lineable (..)
 
+        , projectPointOnLine
+        , projectPointOnSeg
+
+
     ) where
 
 import           Data.List
@@ -66,12 +64,6 @@ data Line    p = Line'    (Pos p) (Vec p) deriving (Show, Read, Generic, NFData)
 data Ray     p = Ray'     (Pos p) (Vec p) deriving (Show, Read, Generic, NFData)
 data Seg     p = Seg'     (Pos p) (Pos p) deriving (Show, Read, Generic, NFData)
 data Polygon p = Polygon' [Pos p]         deriving (Show, Read, Generic, NFData)
--- data Path p
-
-pattern Line    p d <- Line'    p d
-pattern Ray     p d <- Ray'     p d
-pattern Seg     p d <- Seg'     p d
-pattern Polygon ps  <- Polygon' ps
 
 line :: (Eq p, Num p) => Pos p -> Vec p -> Maybe (Line p)
 line p d
@@ -106,14 +98,14 @@ instance (Fractional p, Eq p) => Eq (Line p) where
                 _       -> False
 
 instance (Fractional p, Ord p, Eq p) => Eq (Ray p) where
-    (Ray p1 d1) == (Ray p2 d2) = p1 == p2 && d1 `crossZ` d2 == 0 && d1 `dot` d2 > 0
+    (Ray' p1 d1) == (Ray' p2 d2) = p1 == p2 && d1 `crossZ` d2 == 0 && d1 `dot` d2 > 0
 
 instance Eq p => Eq (Seg p) where
-    (Seg a1 a2) == (Seg b1 b2) = (a1 == b1 && a2 == b2) || (a1 == b2 && a2 == b1)
+    (Seg' a1 a2) == (Seg' b1 b2) = (a1 == b1 && a2 == b2) || (a1 == b2 && a2 == b1)
 
 instance Eq p => Eq (Polygon p) where
     -- Polygons are equal when the list of points or rotated or even reversed
-    (Polygon a) == (Polygon b) = elem a $ rotations b ++ (rotations . reverse) b
+    (Polygon' a) == (Polygon' b) = elem a $ rotations b ++ (rotations . reverse) b
 
 
 instance Arbitrary p => Arbitrary (V2 p) where
@@ -159,7 +151,7 @@ class Lineable a c where
     toLine :: a -> Line c
 
 instance (Eq c, Num c) =>  Lineable (Seg c) c where
-    toLine (Seg a b) = Line' a (b - a)
+    toLine (Seg' a b) = Line' a (b - a)
 
 data LineIntersectT p
     = LTLine
@@ -201,7 +193,7 @@ lineIntersectionT   :: (Fractional a, Eq a)
                     => Line a           -- ^ First line
                     -> Line a           -- ^ Second line
                     -> LineIntersectT a -- ^ Line intersection stuff
-lineIntersectionT l1@(Line p1 d1) l2@(Line p2 d2)
+lineIntersectionT l1@(Line' p1 d1) l2@(Line' p2 d2)
     = if d2Xd1 == 0
         then
             if p21Xd2 == 0
@@ -221,7 +213,7 @@ lineIntersection    :: (Num a, Fractional a, Eq a)
                     => Line a
                     -> Line a
                     -> LineIntersect a
-lineIntersection l1@(Line p1 d1) l2 =
+lineIntersection l1@(Line' p1 d1) l2 =
     case lineIntersectionT l1 l2 of
         LTLine         -> LLine l1
         LTPoint t1 _   -> LPoint (p1 + (d1 ^* t1))
@@ -231,7 +223,7 @@ lineRayIntersection :: (Num a, Fractional a, Ord a, Eq a)
                     => Line a
                     -> Ray a
                     -> LineRayIntersect a
-lineRayIntersection line ray@(Ray rayP rayD) =
+lineRayIntersection line ray@(Ray' rayP rayD) =
     case lineIntersectionT line (Line' rayP rayD) of
         LTLine         -> LRRay ray
         LTPoint _ rayT -> if 0 <= rayT
@@ -243,7 +235,7 @@ lineSegIntersection :: (Num a, Fractional a, Ord a, Eq a)
                     => Line a
                     -> Seg a
                     -> LineSegIntersect a
-lineSegIntersection line seg@(Seg p1 p2) =
+lineSegIntersection line seg@(Seg' p1 p2) =
     case lineIntersectionT line (Line' p1 p12) of
         LTLine         -> LSSeg seg
         LTPoint _ segT -> if 0 <= segT && segT <= 1
@@ -259,7 +251,7 @@ segIntersection :: forall a. (Num a, Fractional a, Ord a, Eq a)
                 => Seg a
                 -> Seg a
                 -> SegIntersect a
-segIntersection segA@(Seg a1 a2) segB@(Seg b1 b2)
+segIntersection segA@(Seg' a1 a2) segB@(Seg' b1 b2)
     | a1 == a2  = maybe SNothing SPoint $ pointSegIntersection a1 segB
     | b1 == b2  = maybe SNothing SPoint $ pointSegIntersection b1 segA
     | otherwise = case lineIntersectionT (Line' a1 a12) (Line' b1 b12) of
@@ -286,9 +278,9 @@ segRayIntersection :: (Num a, Fractional a, Ord a, Eq a)
                    => Seg a
                    -> Ray a
                    -> SegRayIntersect a
-segRayIntersection seg (Ray rayP rayD) =
+segRayIntersection seg (Ray' rayP rayD) =
     case lineSegIntersection (Line' rayP rayD) seg of
-        LSSeg (Seg a b) ->
+        LSSeg (Seg' a b) ->
             if (a - rayP) `dot` rayD < 0
             then
                 if (b - rayP) `dot` rayD < 0
@@ -313,7 +305,7 @@ segRayIntersection seg (Ray rayP rayD) =
         LSNothing -> SRNothing
 
 pointSegIntersection :: (Eq p, Ord p, Num p) => Pos p -> Seg p -> Maybe (Pos p)
-pointSegIntersection p (Seg a b)
+pointSegIntersection p (Seg' a b)
     | p == a ||
       p == b ||
       (pa `crossZ` pb == 0 && pa `dot` pb < 0)
@@ -324,7 +316,7 @@ pointSegIntersection p (Seg a b)
         pb = b - p
 
 pointLineIntersectionT :: (Eq p, Fractional p) => Pos p -> Line p -> Maybe p
-pointLineIntersectionT p (Line x d)
+pointLineIntersectionT p (Line' x d)
     | p == x ||
       xp `crossZ` d == 0
                 = Just $ xp `dot` d / quadrance d
@@ -339,6 +331,26 @@ pointInside (V2 x y) (Polygon' shape) = foldl' (/=) False . map intersectsEdge .
         intersectsEdge (V2 ax ay, V2 bx by)
             = (ay > y) /= (by > y)
             && x < (bx - ax) * (y - ay) / (by - ay) + ax
+
+--
+-- Minimum Distance
+--
+
+projectPointOnLineT :: Fractional p => Pos p -> Line p -> p
+projectPointOnLineT p (Line' q d) = ((p - q) `dot` d) / (d `dot` d)
+
+projectPointOnLine :: Fractional p => Pos p -> Line p -> Pos p
+projectPointOnLine p l@(Line' q d) = (t *^ d) + q
+    where
+        t = projectPointOnLineT p l
+
+projectPointOnSeg :: (Fractional p, Ord p) => Pos p -> Seg p -> Pos p
+projectPointOnSeg p s@(Seg' a b)
+    | t < 0 = a
+    | t > 1 = b
+    | otherwise = ((1 - t) *^ a) + (t *^ b)
+    where
+        t = projectPointOnLineT p (toLine s)
 
 -- -- Some Geometry
 -- data AABB = AABB Pos a Pos a
@@ -394,6 +406,3 @@ pointInside (V2 x y) (Polygon' shape) = foldl' (/=) False . map intersectsEdge .
 -- clipConcavePolygonPath clipPolygon path = foldl (\p (a, ab) -> clipLinePath a ab p) path clipLines
 --     where
 --         clipLines = map (\(a, b) -> (a, (b - a))) $ zip clipPolygon (tail $ cycle clipPolygon)
-
-
-

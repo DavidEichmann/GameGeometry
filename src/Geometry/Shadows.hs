@@ -80,7 +80,7 @@ toWLines :: (Ord p, Fractional p)
          => Pos p
          -> (l, Seg p)
          -> ShadowFront l p
-toWLines focalPoint (l, s@(Seg aInit bInit))
+toWLines focalPoint (l, s@(Seg' aInit bInit))
     = if isColinear
         then empty
         else if aS > bS
@@ -100,7 +100,7 @@ toWLines focalPoint (l, s@(Seg aInit bInit))
 
         isColinear  = aInitV `crossZ` bInitV == 0
 
-        (directed@(Seg a b), aS, bS)
+        (directed@(Seg' a b), aS, bS)
                     = if aInitV `crossZ` (bInit - aInit) > 0
                                 then (s, aInitS, bInitS)
                                 else (seg' bInit aInit, bInitS, aInitS)
@@ -202,7 +202,7 @@ filterMerge focalPoint (ShadowFront filterSF) (ShadowFront sf)
 
                 -- Ray cast along the 2 wedge rays against the 2 segments
                 case (lineRayIntersection uLine aRay, lineRayIntersection uLine bRay, lineRayIntersection vLine aRay, lineRayIntersection vLine bRay) of
-                    
+
                     -- The case we expect!
                     (LRPoint uaP, LRPoint ubP, LRPoint vaP, LRPoint vbP) ->
                         let
@@ -301,7 +301,7 @@ merge focalPoint (ShadowFront as) (ShadowFront bs)
 
                     -- Ray cast along the 2 wedge rays against the 2 segments
                     return $ case (lineRayIntersection uLine aRay, lineRayIntersection uLine bRay, lineRayIntersection vLine aRay, lineRayIntersection vLine bRay) of
-                        
+
                         -- The case we expect!
                         (LRPoint uaP, LRPoint ubP, LRPoint vaP, LRPoint vbP) ->
                             let
@@ -352,31 +352,31 @@ filterByFront = undefined
 
 -- | Given a bunch of (possibly annotated) segments and a focal point, this will calculate the "shaddow fronts".
 -- This is all the connected immediatelly visible segments from the focal point (X). These segments may be cut:
--- 
+--
 --    ---A---
---    |     |                          
---    B     D                   |      
---    |     |                   |     
---    ---C---                   |       
---                        |     |       
---              X         E     F       
---                        |     |       
---                              |       
---                              |       
---                              |     
--- 
+--    |     |
+--    B     D                   |
+--    |     |                   |
+--    ---C---                   |
+--                        |     |
+--              X         E     F
+--                        |     |
+--                              |
+--                              |
+--                              |
+--
 -- Goes to:
 --
---          |                          
---          D                   |      
---          |                   F     
---    ---C---                   |       
---                        |             
---              X         E             
---                        |             
---                              |       
---                              F       
---                              |       
+--          |
+--          D                   |
+--          |                   F
+--    ---C---                   |
+--                        |
+--              X         E
+--                        |
+--                              |
+--                              F
+--                              |
 --
 -- Grouped by connected runs e.g. in the above case: [[D,C],[F,E,F]]
 
@@ -418,7 +418,7 @@ hasSegsToShadowFront focalPoint filterHasSegsMay hasSegs
 --         segToEvents :: SegIx -> [(EventType, Pos p, SegIx)]
 --         segToEvents segIx = case (a - focalPoint) `crossZ` (b - a) of
 --                                     0 -> []
---                                     z 
+--                                     z
 --                                         | z > 0     -> [(Start, a, segIx), (End,   b, segIx)]
 --                                         | otherwise -> [(End,   a, segIx), (Start, b, segIx)]
 --             where
@@ -462,13 +462,13 @@ hasSegsToShadowFront focalPoint filterHasSegsMay hasSegs
 --         -- of segments' distances from the focal points at the start vs. end of the weged:
 --         --
 --         --        Wedge End
---         --                       ____ A ____________                                        
---         --             _B____C__/                                                           
---         --          __/                                                                    
---         --        /                                                                         
---         --     F =                                               ==> start: [A, B, C]                       
---         --         \ __                                              end:   [B, C, A]                       
---         --              |_______A_                                                          
+--         --                       ____ A ____________
+--         --             _B____C__/
+--         --          __/
+--         --        /
+--         --     F =                                               ==> start: [A, B, C]
+--         --         \ __                                              end:   [B, C, A]
+--         --              |_______A_
 --         --                         \______B___                   ==> C intersects A as their relative positions swap
 --         --        Wedge Start                 \_C_____               B intersects A
 --         --                                                           A intersects B and C
@@ -502,7 +502,7 @@ hasSegsToShadowFront focalPoint filterHasSegsMay hasSegs
 --                     -- TODO improve ray casting code to accept lines
 --                     -- NOTE, we convert to lines in order to account for rounding errors
 --                     doRayCastWithLines :: Ray p -> [SegIx] -> [(Pos p, SegIx)]
---                     doRayCastWithLines ray@(Ray f _) segIxs = 
+--                     doRayCastWithLines ray@(Ray f _) segIxs =
 --                         [(p, segIx)     | (line, segIx) <- zip lines segIxs
 --                                         -- , let LRPoint p = traceShow ("initialHotEdges", initialHotEdges, ray, line, lineRayIntersection line ray) $ lineRayIntersection line ray  -- as the segs must not be colinear with the focalpoint, all intersections must be points
 --                                         -- TODO: I managed to get this to fail once (using Floats): the result was not an LRPoint

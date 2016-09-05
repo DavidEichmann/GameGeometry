@@ -19,7 +19,7 @@ angleWedge (Spr lo) (Spr hi) = AngleWedge
                                         (Spr (hi `mod'` 4))
 
 angleWedgeFromPointAndSeg :: RealFrac a => Pos a -> Seg a -> Maybe (AngleWedge a)
-angleWedgeFromPointAndSeg focus (Seg a b) = if c == 0 then Nothing else Just (angleWedge' (spreadX2 fa) (spreadX2 fb))
+angleWedgeFromPointAndSeg focus (Seg' a b) = if c == 0 then Nothing else Just (angleWedge' (spreadX2 fa) (spreadX2 fb))
     where
         fa = a - focus
         fb = b - focus

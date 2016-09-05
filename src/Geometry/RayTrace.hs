@@ -19,7 +19,7 @@ rayTrace :: forall p hasSeg. (Fractional p, Ord p, HasSeg hasSeg p)
     => [hasSeg]
     -> Ray p
     -> [(Pos p, hasSeg)]
-rayTrace edges ray@(Ray rayStart _)
+rayTrace edges ray@(Ray' rayStart _)
     -- Sort by distance to ray start
     = sortOn (qd rayStart . fst)
     -- Get all segment based ray traces.
@@ -39,6 +39,6 @@ toClosestPoint :: (Num p, Ord p)
 toClosestPoint startPos intersection = case intersection of
     SRNothing           -> Nothing
     SRPoint p           -> Just p
-    SRSeg seg@(Seg a b) -> case pointSegIntersection startPos seg of
+    SRSeg seg@(Seg' a b) -> case pointSegIntersection startPos seg of
                             Just p     -> Just p
                             otherwise  -> Just $ minimumBy (compare `on` (qd startPos)) [a, b]
